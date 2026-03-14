@@ -3,4 +3,155 @@
  * Please do not edit it manually.
  */
 
-export interface DB {}
+import type { ColumnType } from "kysely";
+
+export type Generated<T> = T extends ColumnType<infer S, infer I, infer U>
+  ? ColumnType<S, I | undefined, U>
+  : ColumnType<T, T | undefined, T>;
+
+export type Int8 = ColumnType<string, bigint | number | string, bigint | number | string>;
+
+export type Json = JsonValue;
+
+export type JsonArray = JsonValue[];
+
+export type JsonObject = {
+  [x: string]: JsonValue | undefined;
+};
+
+export type JsonPrimitive = boolean | number | string | null;
+
+export type JsonValue = JsonArray | JsonObject | JsonPrimitive;
+
+export type Timestamp = ColumnType<Date, Date | string, Date | string>;
+
+export interface AuthActivityLog {
+  activity: string;
+  created_at: Generated<Timestamp>;
+  id: Generated<Int8>;
+  user_id: string;
+}
+
+export interface AuthSession {
+  expires_at: Int8;
+  id: Generated<number>;
+  token: string;
+  user_id: string;
+}
+
+export interface AuthUsers {
+  created_at: Generated<Timestamp>;
+  email: string;
+  id: Generated<string>;
+  is_active: Generated<boolean>;
+  password_hash: string;
+  username: string;
+}
+
+export interface ChatAttachments {
+  file_name: string;
+  file_size: Int8;
+  file_url: string;
+  id: Generated<Int8>;
+  message_id: Int8;
+  mime_type: string;
+}
+
+export interface ChatMessages {
+  channel_id: Int8;
+  content: string;
+  created_at: Generated<Timestamp>;
+  id: Generated<Int8>;
+  is_edited: Generated<boolean>;
+  parent_id: Int8 | null;
+  sender_id: string;
+}
+
+export interface ChatReactions {
+  created_at: Generated<Timestamp>;
+  emoji: string;
+  id: Generated<Int8>;
+  message_id: Int8;
+  user_id: string;
+}
+
+export interface DocsPageBlocks {
+  content: Json;
+  id: Generated<string>;
+  page_id: string;
+  position: number;
+  type: string;
+  updated_at: Generated<Timestamp>;
+}
+
+export interface DocsPages {
+  channel_id: Int8;
+  created_at: Generated<Timestamp>;
+  created_by: string;
+  icon: string | null;
+  id: Generated<string>;
+  parent_id: string | null;
+  title: string;
+  updated_at: Generated<Timestamp>;
+  workspace_id: string;
+}
+
+export interface TasksTasks {
+  assigned_to: string | null;
+  created_at: Generated<Timestamp>;
+  created_by: string;
+  description: string | null;
+  due_date: Timestamp | null;
+  id: Generated<Int8>;
+  status: string;
+  title: string;
+  workspace_id: string;
+}
+
+export interface Users {
+  created_at: Generated<Timestamp>;
+  email: string;
+  id: Generated<number>;
+  name: string;
+}
+
+export interface WorkspacesChannels {
+  created_at: Generated<Timestamp>;
+  created_by: string;
+  description: string | null;
+  id: Generated<Int8>;
+  name: string;
+  workspace_id: string;
+}
+
+export interface WorkspacesWorkspaceMembers {
+  id: Generated<Int8>;
+  joined_at: Int8;
+  member_id: string;
+  role: string;
+  workspace_id: string;
+}
+
+export interface WorkspacesWorkspaces {
+  created_at: Generated<Timestamp>;
+  id: Generated<string>;
+  name: Generated<string>;
+  owner_id: string;
+  slug: string;
+}
+
+export interface DB {
+  "auth.activity_log": AuthActivityLog;
+  "auth.session": AuthSession;
+  "auth.users": AuthUsers;
+  "chat.attachments": ChatAttachments;
+  "chat.messages": ChatMessages;
+  "chat.reactions": ChatReactions;
+  "docs.page_blocks": DocsPageBlocks;
+  "docs.pages": DocsPages;
+  "tasks.tasks": TasksTasks;
+  users: Users;
+  "workspaces.channels": WorkspacesChannels;
+  "workspaces.workspace_members": WorkspacesWorkspaceMembers;
+  "workspaces.workspaces": WorkspacesWorkspaces;
+}
