@@ -27,6 +27,7 @@ const COOKIE_OPTIONS: CookieSerializeOptions = {
 type AuthPayload = {
   sub: string;
   username: string;
+  session_id: number;
 };
 
 @Injectable()
@@ -50,23 +51,41 @@ export class AuthService {
   }
 
   async login(user: any, response: FastifyReply) {
-    const payload = { username: user.username, sub: user.id };
-    const { accessToken, refreshToken } = this.generateTokenPair(payload);
-    const refreshTokenHash = await bcrypt.hash(refreshToken, 10);
     const now = new Date();
     const refreshExpiredAt = new Date(
       now.getTime() + REFRESH_TOKEN_TTL_SECONDS * 1000,
     );
+    const tempRefreshTokenHash = await bcrypt.hash(
+      `${user.id}:${now.getTime()}`,
+      10,
+    );
 
-    await this.db
+    const createdSession = await this.db
       .insertInto('auth.session')
       .values({
         user_id: user.id,
-        refresh_token_hash: refreshTokenHash,
+        refresh_token_hash: tempRefreshTokenHash,
         expired_at: refreshExpiredAt,
         last_used_at: now,
       })
+      .returning('id')
       .executeTakeFirstOrThrow();
+
+    const payload: AuthPayload = {
+      username: user.username,
+      sub: user.id,
+      session_id: Number(createdSession.id),
+    };
+    const { accessToken, refreshToken } = this.generateTokenPair(payload);
+    const refreshTokenHash = await bcrypt.hash(refreshToken, 10);
+
+    await this.db
+      .updateTable('auth.session')
+      .set({
+        refresh_token_hash: refreshTokenHash,
+      })
+      .where('id', '=', Number(createdSession.id))
+      .executeTakeFirst();
 
     this.setAccessTokenCookie(response, accessToken);
     this.setRefreshTokenCookie(response, refreshToken);
@@ -80,9 +99,18 @@ export class AuthService {
     }
 
     const payload = this.verifyRefreshToken(refreshToken);
-    const session = await this.findActiveSession(payload.sub, refreshToken);
+    const session = await this.findActiveSession(payload.sub, payload.session_id);
 
     if (!session) {
+      throw new UnauthorizedException('Invalid or expired refresh session');
+    }
+
+    const isSessionTokenMatch = await bcrypt.compare(
+      refreshToken,
+      session.refresh_token_hash,
+    );
+
+    if (!isSessionTokenMatch) {
       throw new UnauthorizedException('Invalid or expired refresh session');
     }
 
@@ -115,9 +143,21 @@ export class AuthService {
     if (refreshToken) {
       try {
         const payload = this.verifyRefreshToken(refreshToken);
-        const session = await this.findActiveSession(payload.sub, refreshToken);
+        const session = await this.findActiveSession(
+          payload.sub,
+          payload.session_id,
+        );
 
         if (session) {
+          const isSessionTokenMatch = await bcrypt.compare(
+            refreshToken,
+            session.refresh_token_hash,
+          );
+
+          if (!isSessionTokenMatch) {
+            throw new UnauthorizedException('Invalid refresh token');
+          }
+
           await this.db
             .updateTable('auth.session')
             .set({
@@ -171,27 +211,15 @@ export class AuthService {
 
   private async findActiveSession(
     userId: string,
-    refreshToken: string,
+    sessionId: number,
   ): Promise<Selectable<DB['auth.session']> | undefined> {
-    const activeSessions = await this.db
+    return this.db
       .selectFrom('auth.session')
       .selectAll()
+      .where('id', '=', sessionId)
       .where('user_id', '=', userId)
       .where('revoked_at', 'is', null)
       .where('expired_at', '>', new Date())
-      .execute();
-
-    for (const session of activeSessions) {
-      const isMatch = await bcrypt.compare(
-        refreshToken,
-        session.refresh_token_hash,
-      );
-
-      if (isMatch) {
-        return session;
-      }
-    }
-
-    return undefined;
+      .executeTakeFirst();
   }
 }
