@@ -33,9 +33,12 @@ export interface AuthActivityLog {
 }
 
 export interface AuthSession {
-  expires_at: Int8;
+  created_at: Generated<Timestamp>;
+  expired_at: Timestamp;
   id: Generated<number>;
-  token: string;
+  last_used_at: Generated<Timestamp>;
+  refresh_token_hash: string;
+  revoked_at: Timestamp | null;
   user_id: string;
 }
 

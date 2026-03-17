@@ -3,13 +3,27 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { DB } from 'src/database/database.types';
 import { Kysely } from 'kysely';
+import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class UsersService {
   constructor(@Inject("KYSELY_DB") private readonly db: Kysely<DB>) {}
 
-  create(createUserDto: CreateUserDto) {
-    return 'This action adds a new user';
+  async create(createUserDto: CreateUserDto) {
+    const { username, email, password } = createUserDto;
+    const password_hash = await bcrypt.hash(password, 10);
+
+    const newUser = await this.db
+      .insertInto('auth.users')
+      .values({
+        username,
+        email,
+        password_hash,
+      })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+
+    return newUser;
   }
 
   findAll() {
