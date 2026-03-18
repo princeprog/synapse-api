@@ -7,7 +7,7 @@ import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class UsersService {
-  constructor(@Inject("KYSELY_DB") private readonly db: Kysely<DB>) {}
+  constructor(@Inject('KYSELY_DB') private readonly db: Kysely<DB>) {}
 
   async create(createUserDto: CreateUserDto) {
     const { username, email, password } = createUserDto;
@@ -32,12 +32,12 @@ export class UsersService {
 
   async findOne(username: string) {
     const user = await this.db
-    .selectFrom('auth.users')
-    .selectAll()
-    .where('username', '=', username)
-    .executeTakeFirst();
+      .selectFrom('auth.users')
+      .selectAll()
+      .where('username', '=', username)
+      .executeTakeFirst();
 
-    if(!user) {
+    if (!user) {
       throw new Error('User not found');
     }
 

@@ -44,7 +44,7 @@ export class AuthService {
 
   async validateUser(username: string, password: string): Promise<any> {
     const user = await this.usersService.findOne(username);
-    if (user && await bcrypt.compare(password, user.password_hash)) {
+    if (user && (await bcrypt.compare(password, user.password_hash))) {
       return { id: user.id, username: user.username };
     }
     throw new UnauthorizedException('Invalid credentials');
@@ -99,7 +99,10 @@ export class AuthService {
     }
 
     const payload = this.verifyRefreshToken(refreshToken);
-    const session = await this.findActiveSession(payload.sub, payload.session_id);
+    const session = await this.findActiveSession(
+      payload.sub,
+      payload.session_id,
+    );
 
     if (!session) {
       throw new UnauthorizedException('Invalid or expired refresh session');
