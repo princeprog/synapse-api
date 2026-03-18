@@ -11,11 +11,16 @@ async function bootstrap() {
     AppModule,
     new FastifyAdapter(),
   );
-  
+
+  app.enableCors({
+    origin: ['http://localhost:3000'],
+    credentials: true,
+  });
+
   await app.register(fastifyCookie, {
     secret: process.env.COOKIE_SECRET ?? 'change-me-in-prod',
   });
 
-  await app.listen(3000);
+  await app.listen(3001);
 }
 bootstrap();
