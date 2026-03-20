@@ -6,15 +6,17 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Kysely, sql } from 'kysely';
+import { randomBytes, createHash } from 'crypto';
 
 import type { DB } from '../../database/database.types';
 import { DATABASE_TOKEN } from '../../database/database.module';
 import { CreateWorkspaceDto } from './dto/create-workspace.dto';
 import { UpdateWorkspaceDto } from './dto/update-workspace.dto';
+import { CreateWorkspaceInvitationsDto } from './dto/create-workspace-invitations.dto';
 
 @Injectable()
 export class WorkspacesService {
-  constructor(@Inject(DATABASE_TOKEN) private readonly db: Kysely<DB>) {}
+  constructor(@Inject(DATABASE_TOKEN) private readonly db: Kysely<DB>) { }
 
   private slugify(value: string): string {
     return value
@@ -281,4 +283,60 @@ export class WorkspacesService {
 
     return { message: 'Workspace deleted successfully' };
   }
+
+  async createWorkspaceInvitations(dto: CreateWorkspaceInvitationsDto, workspaceSlug: string, userId: string) {
+    const { email, role } = dto;
+    const workspace = await this.db
+      .selectFrom('workspaces.workspaces')
+      .select(['id'])
+      .where('slug', '=', workspaceSlug)
+      .executeTakeFirst();
+
+    if (!workspace) {
+      throw new NotFoundException('Workspace not found');
+    }
+
+    const pendingInvitation = await this.isInvited(workspace.id, email);
+    if (pendingInvitation) {
+      throw new BadRequestException('An invitation for this email already exists');
+    }
+
+    const tokens = await this.hashToken();
+
+    const invitation = await this.db
+      .insertInto('workspaces.workspace_invitations')
+      .values({
+        workspace_id: workspace.id,
+        email,
+        role,
+        token_hash: tokens.hashedToken,
+        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      })
+      .returningAll()
+      .executeTakeFirst();
+
+      return invitation;
+  }
+
+  private async isInvited(workspaceId: string, email: string) {
+    const invitation = await this.db
+      .selectFrom('workspaces.workspace_invitations')
+      .select('id')
+      .where('workspace_id', '=', workspaceId)
+      .where('email', '=', email)
+      .where('status', '=', 'pending')
+      .executeTakeFirst();
+
+    return !!invitation;
+  }
+
+  private async hashToken(): Promise<{hashedToken: string, token: string}> {
+  const token = randomBytes(32).toString('hex'); 
+
+  const hashedToken = createHash('sha256')
+    .update(token)
+    .digest('hex');
+
+  return {hashedToken, token};
+}
 }

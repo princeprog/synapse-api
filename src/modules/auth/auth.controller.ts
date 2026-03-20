@@ -11,6 +11,8 @@ import { JwtAuthGuard } from './jwt-auth.guard';
 import { CreateUserDto } from '../users/dto/create-user.dto';
 import '@fastify/cookie';
 import type { FastifyReply, FastifyRequest } from 'fastify';
+import { ApiBody, ApiOperation } from '@nestjs/swagger';
+import { LoginDto } from './dto/login.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -22,8 +24,10 @@ export class AuthController {
   }
 
   @Post('login')
+  @ApiOperation({ summary: 'User login', description: 'Authenticates a user and returns access and refresh tokens.' })
+  @ApiBody({ type: LoginDto, description: 'The username and password of the user to log in' })
   async login(
-    @Body() loginDto: { username: string; password: string },
+    @Body() loginDto: LoginDto,
     @Res({ passthrough: true }) response: FastifyReply,
   ) {
     const user = await this.authService.validateUser(
@@ -51,6 +55,7 @@ export class AuthController {
 
   @Post('profile')
   @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Get user profile', description: 'Retrieves the profile information of the authenticated user.' })
   getProfile(@Request() req) {
     return req.user;
   }

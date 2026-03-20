@@ -15,6 +15,8 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CreateWorkspaceDto } from './dto/create-workspace.dto';
 import { UpdateWorkspaceDto } from './dto/update-workspace.dto';
 import { WorkspacesService } from './workspaces.service';
+import { CreateWorkspaceInvitationsDto } from './dto/create-workspace-invitations.dto';
+import { ApiBody, ApiOperation } from '@nestjs/swagger';
 
 type AuthenticatedRequest = FastifyRequest & {
   user: {
@@ -37,9 +39,15 @@ export class WorkspacesController {
     return this.workspacesService.create(req.user.userId, dto);
   }
 
-  @Get()
-  findAll(@Request() req: AuthenticatedRequest) {
-    return this.workspacesService.findAllForUser(req.user.userId);
+  @Post(':workspaceSlug/invitations')
+  @ApiOperation({ summary: 'Create workspace invitations', description: 'Creates invitations for a workspace to invite new members.' })
+  @ApiBody({ type: CreateWorkspaceInvitationsDto, description: 'The details of the invitations to create' })
+  createInvitations(
+    @Request() req: AuthenticatedRequest,
+    @Param('workspaceSlug') workspaceSlug: string,
+    @Body() dto: CreateWorkspaceInvitationsDto,
+  ) {
+    return this.workspacesService.createWorkspaceInvitations(dto, workspaceSlug, req.user.userId);
   }
 
   @Get(':id')
