@@ -24,8 +24,14 @@ export class AuthController {
   }
 
   @Post('login')
-  @ApiOperation({ summary: 'User login', description: 'Authenticates a user and returns access and refresh tokens.' })
-  @ApiBody({ type: LoginDto, description: 'The username and password of the user to log in' })
+  @ApiOperation({
+    summary: 'User login',
+    description: 'Authenticates a user and returns access and refresh tokens.',
+  })
+  @ApiBody({
+    type: LoginDto,
+    description: 'The username and password of the user to log in',
+  })
   async login(
     @Body() loginDto: LoginDto,
     @Res({ passthrough: true }) response: FastifyReply,
@@ -55,7 +61,10 @@ export class AuthController {
 
   @Post('profile')
   @UseGuards(JwtAuthGuard)
-  @ApiOperation({ summary: 'Get user profile', description: 'Retrieves the profile information of the authenticated user.' })
+  @ApiOperation({
+    summary: 'Get user profile',
+    description: 'Retrieves the profile information of the authenticated user.',
+  })
   getProfile(@Request() req) {
     return req.user;
   }

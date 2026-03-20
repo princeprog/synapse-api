@@ -13,10 +13,11 @@ import { DATABASE_TOKEN } from '../../database/database.module';
 import { CreateWorkspaceDto } from './dto/create-workspace.dto';
 import { UpdateWorkspaceDto } from './dto/update-workspace.dto';
 import { CreateWorkspaceInvitationsDto } from './dto/create-workspace-invitations.dto';
+import { UpdateWorkspaceMemberRoleDto } from './dto/update-workspace-member-role.dto';
 
 @Injectable()
 export class WorkspacesService {
-  constructor(@Inject(DATABASE_TOKEN) private readonly db: Kysely<DB>) { }
+  constructor(@Inject(DATABASE_TOKEN) private readonly db: Kysely<DB>) {}
 
   private slugify(value: string): string {
     return value
@@ -284,7 +285,11 @@ export class WorkspacesService {
     return { message: 'Workspace deleted successfully' };
   }
 
-  async createWorkspaceInvitations(dto: CreateWorkspaceInvitationsDto, workspaceSlug: string, userId: string) {
+  async createWorkspaceInvitations(
+    dto: CreateWorkspaceInvitationsDto,
+    workspaceSlug: string,
+    _userId: string,
+  ) {
     const { email, role } = dto;
     const workspace = await this.db
       .selectFrom('workspaces.workspaces')
@@ -298,10 +303,12 @@ export class WorkspacesService {
 
     const pendingInvitation = await this.isInvited(workspace.id, email);
     if (pendingInvitation) {
-      throw new BadRequestException('An invitation for this email already exists');
+      throw new BadRequestException(
+        'An invitation for this email already exists',
+      );
     }
 
-    const tokens = await this.hashToken();
+    const tokens = this.hashToken();
 
     const invitation = await this.db
       .insertInto('workspaces.workspace_invitations')
@@ -315,7 +322,7 @@ export class WorkspacesService {
       .returningAll()
       .executeTakeFirst();
 
-      return invitation;
+    return invitation;
   }
 
   private async isInvited(workspaceId: string, email: string) {
@@ -330,13 +337,171 @@ export class WorkspacesService {
     return !!invitation;
   }
 
-  private async hashToken(): Promise<{hashedToken: string, token: string}> {
-  const token = randomBytes(32).toString('hex'); 
+  private hashToken(): { hashedToken: string; token: string } {
+    const token = randomBytes(32).toString('hex');
 
-  const hashedToken = createHash('sha256')
-    .update(token)
-    .digest('hex');
+    const hashedToken = createHash('sha256').update(token).digest('hex');
 
-  return {hashedToken, token};
-}
+    return { hashedToken, token };
+  }
+
+  private normalizeMemberRole(role: string): 'Admin' | 'Member' {
+    const normalized = role.trim().toLowerCase();
+
+    if (normalized === 'admin') {
+      return 'Admin';
+    }
+
+    if (normalized === 'member') {
+      return 'Member';
+    }
+
+    throw new BadRequestException('Role must be either Admin or Member');
+  }
+
+  private async resolveWorkspaceMemberAccess(
+    workspaceSlug: string,
+    userId: string,
+  ) {
+    const workspace = await this.db
+      .selectFrom('workspaces.workspaces as w')
+      .innerJoin('workspaces.workspace_members as wm', (join) =>
+        join
+          .onRef('wm.workspace_id', '=', 'w.id')
+          .on('wm.member_id', '=', userId),
+      )
+      .select(['w.id', 'w.owner_id', 'wm.role'])
+      .where('w.slug', '=', workspaceSlug)
+      .executeTakeFirst();
+
+    if (!workspace) {
+      throw new NotFoundException('Workspace not found');
+    }
+
+    return workspace;
+  }
+
+  private async findWorkspaceMember(workspaceId: string, memberId: string) {
+    const member = await this.db
+      .selectFrom('workspaces.workspace_members')
+      .select(['member_id', 'role'])
+      .where('workspace_id', '=', workspaceId)
+      .where('member_id', '=', memberId)
+      .executeTakeFirst();
+
+    if (!member) {
+      throw new NotFoundException('Member not found in workspace');
+    }
+
+    return member;
+  }
+
+  async findWorkspaceMembers(workspaceSlug: string) {
+    const workspace = await this.db
+      .selectFrom('workspaces.workspaces')
+      .select('id')
+      .where('slug', '=', workspaceSlug)
+      .executeTakeFirst();
+
+    if (!workspace) {
+      throw new NotFoundException('Workspace not found');
+    }
+
+    const members = await this.db
+      .selectFrom('workspaces.workspace_members as wm')
+      .innerJoin('auth.users as u', 'u.id', 'wm.member_id')
+      .select([
+        'wm.role',
+        'wm.joined_at',
+        'u.id as user_id',
+        'u.username',
+        'u.email',
+      ])
+      .where('wm.workspace_id', '=', workspace.id)
+      .execute();
+    return members;
+  }
+
+  async updateWorkspaceMemberRole(
+    workspaceSlug: string,
+    userId: string,
+    memberId: string,
+    dto: UpdateWorkspaceMemberRoleDto,
+  ) {
+    const workspace = await this.resolveWorkspaceMemberAccess(
+      workspaceSlug,
+      userId,
+    );
+    const actorRole = workspace.role.toLowerCase();
+
+    if (actorRole !== 'admin') {
+      throw new ForbiddenException('Only admins can update member roles');
+    }
+
+    const targetMember = await this.findWorkspaceMember(workspace.id, memberId);
+    const nextRole = this.normalizeMemberRole(dto.role);
+
+    if (targetMember.member_id === workspace.owner_id && nextRole !== 'Admin') {
+      throw new ForbiddenException('Workspace owner role cannot be downgraded');
+    }
+
+    await this.db
+      .updateTable('workspaces.workspace_members')
+      .set({ role: nextRole })
+      .where('workspace_id', '=', workspace.id)
+      .where('member_id', '=', memberId)
+      .executeTakeFirst();
+
+    const updatedMember = await this.db
+      .selectFrom('workspaces.workspace_members as wm')
+      .innerJoin('auth.users as u', 'u.id', 'wm.member_id')
+      .select([
+        'wm.role',
+        'wm.joined_at',
+        'u.id as user_id',
+        'u.username',
+        'u.email',
+      ])
+      .where('wm.workspace_id', '=', workspace.id)
+      .where('wm.member_id', '=', memberId)
+      .executeTakeFirstOrThrow();
+
+    return updatedMember;
+  }
+
+  async removeWorkspaceMember(
+    workspaceSlug: string,
+    userId: string,
+    memberId: string,
+  ) {
+    const workspace = await this.resolveWorkspaceMemberAccess(
+      workspaceSlug,
+      userId,
+    );
+    const actorRole = workspace.role.toLowerCase();
+
+    if (actorRole !== 'admin') {
+      throw new ForbiddenException('Only admins can remove members');
+    }
+
+    const targetMember = await this.findWorkspaceMember(workspace.id, memberId);
+
+    if (targetMember.member_id === workspace.owner_id) {
+      throw new ForbiddenException('Workspace owner cannot be removed');
+    }
+
+    if (targetMember.member_id === userId) {
+      throw new ForbiddenException(
+        'You cannot remove yourself from this workspace',
+      );
+    }
+
+    await this.db
+      .deleteFrom('workspaces.workspace_members')
+      .where('workspace_id', '=', workspace.id)
+      .where('member_id', '=', memberId)
+      .executeTakeFirst();
+
+    return { message: 'Member removed successfully' };
+  }
 }

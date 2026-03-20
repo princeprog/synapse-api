@@ -199,10 +199,14 @@ export class AuthService {
   ) {
     const expiresAt = Date.now() + expiresInSeconds * 5000;
 
-    response.setCookie(ACCESS_TOKEN_EXPIRES_IN_COOKIE, String(expiresInSeconds), {
-      ...COOKIE_OPTIONS,
-      maxAge: ACCESS_TOKEN_TTL_SECONDS,
-    });
+    response.setCookie(
+      ACCESS_TOKEN_EXPIRES_IN_COOKIE,
+      String(expiresInSeconds),
+      {
+        ...COOKIE_OPTIONS,
+        maxAge: ACCESS_TOKEN_TTL_SECONDS,
+      },
+    );
 
     response.setCookie(ACCESS_TOKEN_EXPIRES_AT_COOKIE, String(expiresAt), {
       ...COOKIE_OPTIONS,

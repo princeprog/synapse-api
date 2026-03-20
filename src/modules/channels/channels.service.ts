@@ -33,7 +33,10 @@ export class ChannelsService {
     };
   }
 
-  private async resolveWorkspaceForMember(workspaceSlug: string, userId: string) {
+  private async resolveWorkspaceForMember(
+    workspaceSlug: string,
+    userId: string,
+  ) {
     const workspace = await this.db
       .selectFrom('workspaces.workspaces as w')
       .innerJoin('workspaces.workspace_members as wm', (join) =>
@@ -68,7 +71,10 @@ export class ChannelsService {
   }
 
   async create(userId: string, workspaceSlug: string, dto: CreateChannelDto) {
-    const workspace = await this.resolveWorkspaceForMember(workspaceSlug, userId);
+    const workspace = await this.resolveWorkspaceForMember(
+      workspaceSlug,
+      userId,
+    );
     const name = dto.name?.trim();
 
     if (!name) {
@@ -92,7 +98,10 @@ export class ChannelsService {
   }
 
   async findAllForWorkspace(userId: string, workspaceSlug: string) {
-    const workspace = await this.resolveWorkspaceForMember(workspaceSlug, userId);
+    const workspace = await this.resolveWorkspaceForMember(
+      workspaceSlug,
+      userId,
+    );
 
     const channels = await this.db
       .selectFrom('workspaces.channels')
@@ -109,7 +118,10 @@ export class ChannelsService {
     workspaceSlug: string,
     channelId: string,
   ) {
-    const workspace = await this.resolveWorkspaceForMember(workspaceSlug, userId);
+    const workspace = await this.resolveWorkspaceForMember(
+      workspaceSlug,
+      userId,
+    );
     const channel = await this.findChannelById(workspace.id, channelId);
 
     return this.mapChannelRow(channel);
@@ -121,7 +133,10 @@ export class ChannelsService {
     channelId: string,
     dto: UpdateChannelDto,
   ) {
-    const workspace = await this.resolveWorkspaceForMember(workspaceSlug, userId);
+    const workspace = await this.resolveWorkspaceForMember(
+      workspaceSlug,
+      userId,
+    );
     const existing = await this.findChannelById(workspace.id, channelId);
 
     const updates: { name?: string; description?: string | null } = {};
@@ -155,7 +170,10 @@ export class ChannelsService {
   }
 
   async remove(userId: string, workspaceSlug: string, channelId: string) {
-    const workspace = await this.resolveWorkspaceForMember(workspaceSlug, userId);
+    const workspace = await this.resolveWorkspaceForMember(
+      workspaceSlug,
+      userId,
+    );
     await this.findChannelById(workspace.id, channelId);
 
     await this.db
