@@ -3,18 +3,13 @@
  * Please do not edit it manually.
  */
 
-import type { ColumnType } from 'kysely';
+import type { ColumnType } from "kysely";
 
-export type Generated<T> =
-  T extends ColumnType<infer S, infer I, infer U>
-    ? ColumnType<S, I | undefined, U>
-    : ColumnType<T, T | undefined, T>;
+export type Generated<T> = T extends ColumnType<infer S, infer I, infer U>
+  ? ColumnType<S, I | undefined, U>
+  : ColumnType<T, T | undefined, T>;
 
-export type Int8 = ColumnType<
-  string,
-  bigint | number | string,
-  bigint | number | string
->;
+export type Int8 = ColumnType<string, bigint | number | string, bigint | number | string>;
 
 export type Json = JsonValue;
 
@@ -132,6 +127,17 @@ export interface WorkspacesChannels {
   workspace_id: string;
 }
 
+export interface WorkspacesWorkspaceInvitations {
+  accepted_at: Timestamp | null;
+  email: string;
+  expires_at: Timestamp;
+  id: Generated<string>;
+  role: string;
+  status: Generated<string>;
+  token_hash: string;
+  workspace_id: string;
+}
+
 export interface WorkspacesWorkspaceMembers {
   id: Generated<Int8>;
   joined_at: Int8;
@@ -149,17 +155,18 @@ export interface WorkspacesWorkspaces {
 }
 
 export interface DB {
-  'auth.activity_log': AuthActivityLog;
-  'auth.session': AuthSession;
-  'auth.users': AuthUsers;
-  'chat.attachments': ChatAttachments;
-  'chat.messages': ChatMessages;
-  'chat.reactions': ChatReactions;
-  'docs.page_blocks': DocsPageBlocks;
-  'docs.pages': DocsPages;
-  'tasks.tasks': TasksTasks;
+  "auth.activity_log": AuthActivityLog;
+  "auth.session": AuthSession;
+  "auth.users": AuthUsers;
+  "chat.attachments": ChatAttachments;
+  "chat.messages": ChatMessages;
+  "chat.reactions": ChatReactions;
+  "docs.page_blocks": DocsPageBlocks;
+  "docs.pages": DocsPages;
+  "tasks.tasks": TasksTasks;
   users: Users;
-  'workspaces.channels': WorkspacesChannels;
-  'workspaces.workspace_members': WorkspacesWorkspaceMembers;
-  'workspaces.workspaces': WorkspacesWorkspaces;
+  "workspaces.channels": WorkspacesChannels;
+  "workspaces.workspace_invitations": WorkspacesWorkspaceInvitations;
+  "workspaces.workspace_members": WorkspacesWorkspaceMembers;
+  "workspaces.workspaces": WorkspacesWorkspaces;
 }
