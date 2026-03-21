@@ -3,18 +3,13 @@
  * Please do not edit it manually.
  */
 
-import type { ColumnType } from 'kysely';
+import type { ColumnType } from "kysely";
 
-export type Generated<T> =
-  T extends ColumnType<infer S, infer I, infer U>
-    ? ColumnType<S, I | undefined, U>
-    : ColumnType<T, T | undefined, T>;
+export type Generated<T> = T extends ColumnType<infer S, infer I, infer U>
+  ? ColumnType<S, I | undefined, U>
+  : ColumnType<T, T | undefined, T>;
 
-export type Int8 = ColumnType<
-  string,
-  bigint | number | string,
-  bigint | number | string
->;
+export type Int8 = ColumnType<string, bigint | number | string, bigint | number | string>;
 
 export type Json = JsonValue;
 
@@ -104,6 +99,29 @@ export interface DocsPages {
   workspace_id: string;
 }
 
+export interface NotificationsDeliveries {
+  delivered_at: Generated<Timestamp>;
+  event_id: string;
+  id: Generated<string>;
+  read_at: Timestamp | null;
+  recipient_user_id: string;
+  seen_at: Timestamp | null;
+  status: Generated<string>;
+}
+
+export interface NotificationsEvents {
+  actor_user_id: string | null;
+  channel: Generated<string>;
+  created_at: Generated<Timestamp>;
+  entity_id: string | null;
+  entity_type: string;
+  event_type: string;
+  id: Generated<string>;
+  payload: Generated<Json>;
+  payload_version: Generated<number>;
+  workspace_id: string | null;
+}
+
 export interface TasksTasks {
   assigned_to: string | null;
   created_at: Generated<Timestamp>;
@@ -137,6 +155,10 @@ export interface WorkspacesWorkspaceInvitations {
   email: string;
   expires_at: Timestamp;
   id: Generated<string>;
+  invited_user_id: string | null;
+  responded_at: Timestamp | null;
+  responded_by_user_id: string | null;
+  response: string | null;
   role: string;
   status: Generated<string>;
   token_hash: string;
@@ -160,18 +182,20 @@ export interface WorkspacesWorkspaces {
 }
 
 export interface DB {
-  'auth.activity_log': AuthActivityLog;
-  'auth.session': AuthSession;
-  'auth.users': AuthUsers;
-  'chat.attachments': ChatAttachments;
-  'chat.messages': ChatMessages;
-  'chat.reactions': ChatReactions;
-  'docs.page_blocks': DocsPageBlocks;
-  'docs.pages': DocsPages;
-  'tasks.tasks': TasksTasks;
+  "auth.activity_log": AuthActivityLog;
+  "auth.session": AuthSession;
+  "auth.users": AuthUsers;
+  "chat.attachments": ChatAttachments;
+  "chat.messages": ChatMessages;
+  "chat.reactions": ChatReactions;
+  "docs.page_blocks": DocsPageBlocks;
+  "docs.pages": DocsPages;
+  "notifications.deliveries": NotificationsDeliveries;
+  "notifications.events": NotificationsEvents;
+  "tasks.tasks": TasksTasks;
   users: Users;
-  'workspaces.channels': WorkspacesChannels;
-  'workspaces.workspace_invitations': WorkspacesWorkspaceInvitations;
-  'workspaces.workspace_members': WorkspacesWorkspaceMembers;
-  'workspaces.workspaces': WorkspacesWorkspaces;
+  "workspaces.channels": WorkspacesChannels;
+  "workspaces.workspace_invitations": WorkspacesWorkspaceInvitations;
+  "workspaces.workspace_members": WorkspacesWorkspaceMembers;
+  "workspaces.workspaces": WorkspacesWorkspaces;
 }

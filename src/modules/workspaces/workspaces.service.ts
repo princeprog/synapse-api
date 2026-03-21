@@ -14,10 +14,14 @@ import { CreateWorkspaceDto } from './dto/create-workspace.dto';
 import { UpdateWorkspaceDto } from './dto/update-workspace.dto';
 import { CreateWorkspaceInvitationsDto } from './dto/create-workspace-invitations.dto';
 import { UpdateWorkspaceMemberRoleDto } from './dto/update-workspace-member-role.dto';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class WorkspacesService {
-  constructor(@Inject(DATABASE_TOKEN) private readonly db: Kysely<DB>) {}
+  constructor(
+    @Inject(DATABASE_TOKEN) private readonly db: Kysely<DB>,
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   private slugify(value: string): string {
     return value
@@ -300,7 +304,14 @@ export class WorkspacesService {
       throw new ForbiddenException('Only admins can create invitations');
     }
 
-    const { email, role } = dto;
+    const email = dto.email.trim().toLowerCase();
+    const role = this.normalizeMemberRole(dto.role);
+
+    const invitedUser = await this.db
+      .selectFrom('auth.users')
+      .select(['id'])
+      .where('email', '=', email)
+      .executeTakeFirst();
 
     const pendingInvitation = await this.isInvited(workspaceAccess.id, email);
     if (pendingInvitation) {
@@ -317,11 +328,43 @@ export class WorkspacesService {
         workspace_id: workspaceAccess.id,
         email,
         role,
+        invited_user_id: invitedUser?.id ?? null,
         token_hash: tokens.hashedToken,
         expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       })
       .returningAll()
       .executeTakeFirst();
+
+    if (invitation) {
+      const workspace = await this.db
+        .selectFrom('workspaces.workspaces')
+        .select(['id', 'slug', 'name'])
+        .where('id', '=', workspaceAccess.id)
+        .executeTakeFirstOrThrow();
+
+      const adminIds = await this.findWorkspaceAdminIds(workspace.id);
+      const recipients = [
+        ...adminIds,
+        ...(invitedUser?.id ? [invitedUser.id] : []),
+      ];
+
+      await this.notificationsService.publishEvent({
+        eventType: 'workspace.invite.created',
+        workspaceId: workspace.id,
+        actorUserId: userId,
+        entityType: 'workspace_invitation',
+        entityId: invitation.id,
+        payload: {
+          workspaceSlug: workspace.slug,
+          workspaceName: workspace.name,
+          email,
+          role,
+          status: 'pending',
+          expiresAt: invitation.expires_at.toISOString(),
+        },
+        recipientUserIds: recipients,
+      });
+    }
 
     return invitation;
   }
@@ -370,7 +413,7 @@ export class WorkspacesService {
 
     const invitation = await this.db
       .selectFrom('workspaces.workspace_invitations')
-      .select(['id', 'status'])
+      .select(['id', 'status', 'email', 'role', 'invited_user_id'])
       .where('workspace_id', '=', workspace.id)
       .where('id', '=', invitationId)
       .executeTakeFirst();
@@ -388,7 +431,252 @@ export class WorkspacesService {
       .where('id', '=', invitationId)
       .executeTakeFirst();
 
+    const adminIds = await this.findWorkspaceAdminIds(workspace.id);
+    const recipients = [
+      ...adminIds,
+      ...(invitation.invited_user_id ? [invitation.invited_user_id] : []),
+    ];
+
+    await this.notificationsService.publishEvent({
+      eventType: 'workspace.invite.revoked',
+      workspaceId: workspace.id,
+      actorUserId: userId,
+      entityType: 'workspace_invitation',
+      entityId: invitation.id,
+      payload: {
+        workspaceSlug,
+        email: invitation.email,
+        role: invitation.role,
+        status: 'revoked',
+      },
+      recipientUserIds: recipients,
+    });
+
     return { message: 'Invitation revoked successfully' };
+  }
+
+  async findMyPendingInvitations(userId: string) {
+    const user = await this.db
+      .selectFrom('auth.users')
+      .select(['id', 'email'])
+      .where('id', '=', userId)
+      .executeTakeFirstOrThrow();
+
+    const invitations = await this.db
+      .selectFrom('workspaces.workspace_invitations as wi')
+      .innerJoin('workspaces.workspaces as w', 'w.id', 'wi.workspace_id')
+      .select([
+        'wi.id',
+        'wi.email',
+        'wi.role',
+        'wi.status',
+        'wi.expires_at',
+        'wi.accepted_at',
+        'w.id as workspace_id',
+        'w.slug as workspace_slug',
+        'w.name as workspace_name',
+      ])
+      .where('wi.status', '=', 'pending')
+      .where('wi.expires_at', '>', new Date())
+      .where((eb) =>
+        eb.or([
+          eb('wi.invited_user_id', '=', user.id),
+          eb('wi.email', '=', user.email.toLowerCase()),
+        ]),
+      )
+      .orderBy('wi.expires_at', 'asc')
+      .execute();
+
+    return invitations.map((invitation) => ({
+      id: invitation.id,
+      email: invitation.email,
+      role: invitation.role,
+      status: invitation.status,
+      expiresAt: invitation.expires_at,
+      acceptedAt: invitation.accepted_at,
+      workspace: {
+        id: invitation.workspace_id,
+        slug: invitation.workspace_slug,
+        name: invitation.workspace_name,
+      },
+    }));
+  }
+
+  async acceptWorkspaceInvitation(invitationId: string, userId: string) {
+    const user = await this.db
+      .selectFrom('auth.users')
+      .select(['id', 'email'])
+      .where('id', '=', userId)
+      .executeTakeFirstOrThrow();
+
+    const invitation = await this.db
+      .selectFrom('workspaces.workspace_invitations as wi')
+      .innerJoin('workspaces.workspaces as w', 'w.id', 'wi.workspace_id')
+      .select([
+        'wi.id',
+        'wi.workspace_id',
+        'wi.email',
+        'wi.role',
+        'wi.status',
+        'wi.expires_at',
+        'w.slug as workspace_slug',
+        'w.name as workspace_name',
+      ])
+      .where('wi.id', '=', invitationId)
+      .where((eb) =>
+        eb.or([
+          eb('wi.invited_user_id', '=', user.id),
+          eb('wi.email', '=', user.email.toLowerCase()),
+        ]),
+      )
+      .executeTakeFirst();
+
+    if (!invitation) {
+      throw new NotFoundException('Invitation not found');
+    }
+
+    if (invitation.status !== 'pending') {
+      throw new BadRequestException('Invitation is no longer pending');
+    }
+
+    if (invitation.expires_at.getTime() <= Date.now()) {
+      await this.db
+        .updateTable('workspaces.workspace_invitations')
+        .set({ status: 'expired' })
+        .where('id', '=', invitation.id)
+        .executeTakeFirst();
+
+      throw new BadRequestException('Invitation has expired');
+    }
+
+    await this.db.transaction().execute(async (trx) => {
+      const existingMember = await trx
+        .selectFrom('workspaces.workspace_members')
+        .select('id')
+        .where('workspace_id', '=', invitation.workspace_id)
+        .where('member_id', '=', user.id)
+        .executeTakeFirst();
+
+      if (!existingMember) {
+        await trx
+          .insertInto('workspaces.workspace_members')
+          .values({
+            workspace_id: invitation.workspace_id,
+            member_id: user.id,
+            role: this.normalizeMemberRole(invitation.role),
+            joined_at: Date.now(),
+          })
+          .executeTakeFirst();
+      }
+
+      await trx
+        .updateTable('workspaces.workspace_invitations')
+        .set({
+          status: 'accepted',
+          accepted_at: new Date(),
+          responded_at: new Date(),
+          responded_by_user_id: user.id,
+          response: 'accepted',
+        })
+        .where('id', '=', invitation.id)
+        .executeTakeFirst();
+    });
+
+    const adminIds = await this.findWorkspaceAdminIds(invitation.workspace_id);
+
+    await this.notificationsService.publishEvent({
+      eventType: 'workspace.invite.accepted',
+      workspaceId: invitation.workspace_id,
+      actorUserId: user.id,
+      entityType: 'workspace_invitation',
+      entityId: invitation.id,
+      payload: {
+        workspaceSlug: invitation.workspace_slug,
+        workspaceName: invitation.workspace_name,
+        invitedEmail: user.email,
+        role: this.normalizeMemberRole(invitation.role),
+        status: 'accepted',
+      },
+      recipientUserIds: adminIds,
+    });
+
+    return {
+      message: 'Invitation accepted successfully',
+      workspaceSlug: invitation.workspace_slug,
+    };
+  }
+
+  async declineWorkspaceInvitation(invitationId: string, userId: string) {
+    const user = await this.db
+      .selectFrom('auth.users')
+      .select(['id', 'email'])
+      .where('id', '=', userId)
+      .executeTakeFirstOrThrow();
+
+    const invitation = await this.db
+      .selectFrom('workspaces.workspace_invitations as wi')
+      .innerJoin('workspaces.workspaces as w', 'w.id', 'wi.workspace_id')
+      .select([
+        'wi.id',
+        'wi.workspace_id',
+        'wi.email',
+        'wi.role',
+        'wi.status',
+        'wi.expires_at',
+        'w.slug as workspace_slug',
+        'w.name as workspace_name',
+      ])
+      .where('wi.id', '=', invitationId)
+      .where((eb) =>
+        eb.or([
+          eb('wi.invited_user_id', '=', user.id),
+          eb('wi.email', '=', user.email.toLowerCase()),
+        ]),
+      )
+      .executeTakeFirst();
+
+    if (!invitation) {
+      throw new NotFoundException('Invitation not found');
+    }
+
+    if (invitation.status !== 'pending') {
+      throw new BadRequestException('Invitation is no longer pending');
+    }
+
+    await this.db
+      .updateTable('workspaces.workspace_invitations')
+      .set({
+        status: 'declined',
+        responded_at: new Date(),
+        responded_by_user_id: user.id,
+        response: 'declined',
+      })
+      .where('id', '=', invitation.id)
+      .executeTakeFirst();
+
+    const adminIds = await this.findWorkspaceAdminIds(invitation.workspace_id);
+
+    await this.notificationsService.publishEvent({
+      eventType: 'workspace.invite.declined',
+      workspaceId: invitation.workspace_id,
+      actorUserId: user.id,
+      entityType: 'workspace_invitation',
+      entityId: invitation.id,
+      payload: {
+        workspaceSlug: invitation.workspace_slug,
+        workspaceName: invitation.workspace_name,
+        invitedEmail: user.email,
+        role: invitation.role,
+        status: 'declined',
+      },
+      recipientUserIds: adminIds,
+    });
+
+    return { message: 'Invitation declined successfully' };
+  }
+
+  async findMyNotificationFeed(userId: string) {
+    return this.notificationsService.findFeedForUser(userId);
   }
 
   private async isInvited(workspaceId: string, email: string) {
@@ -401,6 +689,17 @@ export class WorkspacesService {
       .executeTakeFirst();
 
     return !!invitation;
+  }
+
+  private async findWorkspaceAdminIds(workspaceId: string): Promise<string[]> {
+    const admins = await this.db
+      .selectFrom('workspaces.workspace_members')
+      .select('member_id')
+      .where('workspace_id', '=', workspaceId)
+      .where(sql<boolean>`lower(role) = 'admin'`)
+      .execute();
+
+    return admins.map((admin) => admin.member_id);
   }
 
   private hashToken(): { hashedToken: string; token: string } {

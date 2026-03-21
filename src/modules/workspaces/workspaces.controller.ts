@@ -45,6 +45,54 @@ export class WorkspacesController {
     return this.workspacesService.findAllForUser(req.user.userId);
   }
 
+  @Get('invitations/me')
+  @ApiOperation({
+    summary: 'List my pending invitations',
+    description: 'Retrieves pending invitations for the authenticated user.',
+  })
+  getMyPendingInvitations(@Request() req: AuthenticatedRequest) {
+    return this.workspacesService.findMyPendingInvitations(req.user.userId);
+  }
+
+  @Post('invitations/:invitationId/accept')
+  @ApiOperation({
+    summary: 'Accept invitation',
+    description: 'Accepts a pending workspace invitation.',
+  })
+  acceptInvitation(
+    @Request() req: AuthenticatedRequest,
+    @Param('invitationId') invitationId: string,
+  ) {
+    return this.workspacesService.acceptWorkspaceInvitation(
+      invitationId,
+      req.user.userId,
+    );
+  }
+
+  @Post('invitations/:invitationId/decline')
+  @ApiOperation({
+    summary: 'Decline invitation',
+    description: 'Declines a pending workspace invitation.',
+  })
+  declineInvitation(
+    @Request() req: AuthenticatedRequest,
+    @Param('invitationId') invitationId: string,
+  ) {
+    return this.workspacesService.declineWorkspaceInvitation(
+      invitationId,
+      req.user.userId,
+    );
+  }
+
+  @Get('notifications/me')
+  @ApiOperation({
+    summary: 'Get my notifications feed',
+    description: 'Retrieves realtime-backed notifications for the authenticated user.',
+  })
+  getMyNotifications(@Request() req: AuthenticatedRequest) {
+    return this.workspacesService.findMyNotificationFeed(req.user.userId);
+  }
+
   
 
   @Get(':workspaceSlug/members')

@@ -5,6 +5,7 @@ import { AppService } from './app.service';
 import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { ChannelsModule } from './modules/channels/channels.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 import { UsersModule } from './modules/users/users.module';
 import { WorkspacesModule } from './modules/workspaces/workspaces.module';
 
@@ -14,6 +15,7 @@ import { WorkspacesModule } from './modules/workspaces/workspaces.module';
     DatabaseModule,
     AuthModule,
     ChannelsModule,
+    NotificationsModule,
     UsersModule,
     WorkspacesModule,
   ],
