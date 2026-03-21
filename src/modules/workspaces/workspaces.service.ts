@@ -288,20 +288,21 @@ export class WorkspacesService {
   async createWorkspaceInvitations(
     dto: CreateWorkspaceInvitationsDto,
     workspaceSlug: string,
-    _userId: string,
+    userId: string,
   ) {
-    const { email, role } = dto;
-    const workspace = await this.db
-      .selectFrom('workspaces.workspaces')
-      .select(['id'])
-      .where('slug', '=', workspaceSlug)
-      .executeTakeFirst();
+    const workspaceAccess = await this.resolveWorkspaceMemberAccess(
+      workspaceSlug,
+      userId,
+    );
+    const actorRole = workspaceAccess.role.toLowerCase();
 
-    if (!workspace) {
-      throw new NotFoundException('Workspace not found');
+    if (actorRole !== 'admin') {
+      throw new ForbiddenException('Only admins can create invitations');
     }
 
-    const pendingInvitation = await this.isInvited(workspace.id, email);
+    const { email, role } = dto;
+
+    const pendingInvitation = await this.isInvited(workspaceAccess.id, email);
     if (pendingInvitation) {
       throw new BadRequestException(
         'An invitation for this email already exists',
@@ -313,7 +314,7 @@ export class WorkspacesService {
     const invitation = await this.db
       .insertInto('workspaces.workspace_invitations')
       .values({
-        workspace_id: workspace.id,
+        workspace_id: workspaceAccess.id,
         email,
         role,
         token_hash: tokens.hashedToken,
@@ -323,6 +324,71 @@ export class WorkspacesService {
       .executeTakeFirst();
 
     return invitation;
+  }
+
+  async findPendingWorkspaceInvitations(workspaceSlug: string, userId: string) {
+    const workspace = await this.resolveWorkspaceMemberAccess(
+      workspaceSlug,
+      userId,
+    );
+    const actorRole = workspace.role.toLowerCase();
+
+    if (actorRole !== 'admin') {
+      throw new ForbiddenException('Only admins can view pending invitations');
+    }
+
+    return this.db
+      .selectFrom('workspaces.workspace_invitations')
+      .select([
+        'id',
+        'email',
+        'role',
+        'status',
+        'expires_at',
+        'accepted_at',
+      ])
+      .where('workspace_id', '=', workspace.id)
+      .where('status', '=', 'pending')
+      .orderBy('expires_at', 'asc')
+      .execute();
+  }
+
+  async removeWorkspaceInvitation(
+    workspaceSlug: string,
+    userId: string,
+    invitationId: string,
+  ) {
+    const workspace = await this.resolveWorkspaceMemberAccess(
+      workspaceSlug,
+      userId,
+    );
+    const actorRole = workspace.role.toLowerCase();
+
+    if (actorRole !== 'admin') {
+      throw new ForbiddenException('Only admins can revoke invitations');
+    }
+
+    const invitation = await this.db
+      .selectFrom('workspaces.workspace_invitations')
+      .select(['id', 'status'])
+      .where('workspace_id', '=', workspace.id)
+      .where('id', '=', invitationId)
+      .executeTakeFirst();
+
+    if (!invitation) {
+      throw new NotFoundException('Invitation not found');
+    }
+
+    if (invitation.status !== 'pending') {
+      throw new BadRequestException('Only pending invitations can be revoked');
+    }
+
+    await this.db
+      .deleteFrom('workspaces.workspace_invitations')
+      .where('id', '=', invitationId)
+      .executeTakeFirst();
+
+    return { message: 'Invitation revoked successfully' };
   }
 
   private async isInvited(workspaceId: string, email: string) {

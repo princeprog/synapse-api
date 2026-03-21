@@ -45,6 +45,8 @@ export class WorkspacesController {
     return this.workspacesService.findAllForUser(req.user.userId);
   }
 
+  
+
   @Get(':workspaceSlug/members')
   @ApiOperation({
     summary: 'Get workspace members',
@@ -94,6 +96,27 @@ export class WorkspacesController {
     );
   }
 
+  
+
+  @Get(':id')
+  findOne(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
+    return this.workspacesService.findOneForUser(id, req.user.userId);
+  }
+
+  @Patch(':id')
+  update(
+    @Request() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() dto: UpdateWorkspaceDto,
+  ) {
+    return this.workspacesService.update(id, req.user.userId, dto);
+  }
+
+  @Delete(':id')
+  remove(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
+    return this.workspacesService.remove(id, req.user.userId);
+  }
+
   @Post(':workspaceSlug/invitations')
   @ApiOperation({
     summary: 'Create workspace invitations',
@@ -115,22 +138,35 @@ export class WorkspacesController {
     );
   }
 
-  @Get(':id')
-  findOne(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
-    return this.workspacesService.findOneForUser(id, req.user.userId);
-  }
-
-  @Patch(':id')
-  update(
+  @Get(':workspaceSlug/invitations')
+  @ApiOperation({
+    summary: 'List pending workspace invitations',
+    description: 'Retrieves pending invitations for a workspace.',
+  })
+  getPendingInvitations(
     @Request() req: AuthenticatedRequest,
-    @Param('id') id: string,
-    @Body() dto: UpdateWorkspaceDto,
+    @Param('workspaceSlug') workspaceSlug: string,
   ) {
-    return this.workspacesService.update(id, req.user.userId, dto);
+    return this.workspacesService.findPendingWorkspaceInvitations(
+      workspaceSlug,
+      req.user.userId,
+    );
   }
 
-  @Delete(':id')
-  remove(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
-    return this.workspacesService.remove(id, req.user.userId);
+  @Delete(':workspaceSlug/invitations/:invitationId')
+  @ApiOperation({
+    summary: 'Revoke workspace invitation',
+    description: 'Revokes a pending invitation from a workspace.',
+  })
+  revokeInvitation(
+    @Request() req: AuthenticatedRequest,
+    @Param('workspaceSlug') workspaceSlug: string,
+    @Param('invitationId') invitationId: string,
+  ) {
+    return this.workspacesService.removeWorkspaceInvitation(
+      workspaceSlug,
+      req.user.userId,
+      invitationId,
+    );
   }
 }
