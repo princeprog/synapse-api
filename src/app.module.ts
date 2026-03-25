@@ -8,6 +8,7 @@ import { ChannelsModule } from './modules/channels/channels.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { UsersModule } from './modules/users/users.module';
 import { WorkspacesModule } from './modules/workspaces/workspaces.module';
+import { MessagesModule } from './modules/messages/messages.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { WorkspacesModule } from './modules/workspaces/workspaces.module';
     NotificationsModule,
     UsersModule,
     WorkspacesModule,
+    MessagesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

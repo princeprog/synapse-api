@@ -19,3 +19,5 @@ import type {
 export type User = Selectable<AuthUsers>;
 export type NewUser = Insertable<AuthUsers>;
 export type UpdateUser = Updateable<AuthUsers>;
+
+export type Message = Selectable<ChatMessages>
