@@ -32,11 +32,6 @@ type AuthPayload = {
   session_id: number;
 };
 
-type AuthenticatedUser = {
-  id: string;
-  username: string;
-};
-
 export type AuthGuardUser = {
   userId: string;
   username: string;
@@ -55,10 +50,7 @@ export class AuthService {
     return await this.usersService.create(createUserDto);
   }
 
-  async validateUser(
-    username: string,
-    password: string,
-  ): Promise<AuthenticatedUser> {
+  async validateUser(username: string, password: string): Promise<any> {
     const user = await this.usersService.findOne(username);
     if (user && (await bcrypt.compare(password, user.password_hash))) {
       return { id: user.id, username: user.username };
@@ -66,7 +58,7 @@ export class AuthService {
     throw new UnauthorizedException('Invalid credentials');
   }
 
-  async login(user: AuthenticatedUser, response: FastifyReply) {
+  async login(user: any, response: FastifyReply) {
     const now = new Date();
     const refreshExpiredAt = new Date(
       now.getTime() + REFRESH_TOKEN_TTL_SECONDS * 1000,
@@ -102,8 +94,6 @@ export class AuthService {
       })
       .where('id', '=', Number(createdSession.id))
       .executeTakeFirst();
-
-    await this.setUserStatus(user.id, 'active');
 
     this.setAccessTokenCookie(response, accessToken);
     this.setRefreshTokenCookie(response, refreshToken);
@@ -160,8 +150,6 @@ export class AuthService {
             })
             .where('id', '=', Number(session.id))
             .executeTakeFirst();
-
-          await this.updateUserStatusAfterSessionRevocation(payload.sub);
         }
       } catch {
         // If token verification fails, cookies are still cleared.
@@ -298,27 +286,5 @@ export class AuthService {
       .where('revoked_at', 'is', null)
       .where('expired_at', '>', new Date())
       .executeTakeFirst();
-  }
-
-  private async setUserStatus(userId: string, status: 'active' | 'offline') {
-    await this.db
-      .updateTable('auth.users')
-      .set({ status })
-      .where('id', '=', userId)
-      .executeTakeFirst();
-  }
-
-  private async updateUserStatusAfterSessionRevocation(userId: string) {
-    const activeSession = await this.db
-      .selectFrom('auth.session')
-      .select('id')
-      .where('user_id', '=', userId)
-      .where('revoked_at', 'is', null)
-      .where('expired_at', '>', new Date())
-      .executeTakeFirst();
-
-    if (!activeSession) {
-      await this.setUserStatus(userId, 'offline');
-    }
   }
 }
