@@ -1,4 +1,4 @@
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { DB } from 'src/database/database.types';
@@ -8,6 +8,32 @@ import * as bcrypt from 'bcrypt';
 @Injectable()
 export class UsersService {
   constructor(@Inject('KYSELY_DB') private readonly db: Kysely<DB>) {}
+
+  async getProfileByUserId(userId: string) {
+    const userProfile = await this.db
+      .selectFrom('auth.users as u')
+      .leftJoin('auth.user_profiles as up', 'up.user_id', 'u.id')
+      .select([
+        'u.id',
+        'u.username',
+        'u.email',
+        'u.status',
+        'u.is_active',
+        'u.created_at',
+        'up.display_name',
+        'up.avatar_url',
+        'up.bio',
+        'up.timezone',
+      ])
+      .where('u.id', '=', userId)
+      .executeTakeFirst();
+
+    if (!userProfile) {
+      throw new NotFoundException('User profile not found');
+    }
+
+    return userProfile;
+  }
 
   async create(createUserDto: CreateUserDto) {
     const { username, email, password } = createUserDto;
