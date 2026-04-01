@@ -150,6 +150,20 @@ export class UsersService {
     return updatedUser;
   }
 
+  async setStatus(userId: string, status: 'active' | 'offline') {
+    const result = await this.db
+      .updateTable('auth.users')
+      .set({ status })
+      .where('id', '=', userId)
+      .executeTakeFirst();
+
+    if (result.numUpdatedRows === 0n) {
+      throw new NotFoundException('User not found');
+    }
+
+    return { userId, status };
+  }
+
   remove(id: number) {
     return `This action removes a #${id} user`;
   }
