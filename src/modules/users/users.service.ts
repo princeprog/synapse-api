@@ -51,7 +51,7 @@ export class UsersService {
       username?: string;
       email?: string;
       password_hash?: string;
-      status?: string;
+      status?: 'active' | 'offline';
     } = {};
 
     if (username !== undefined) authUpdate.username = username;
@@ -76,23 +76,30 @@ export class UsersService {
       updateUserDto.timezone !== undefined;
 
     if (hasProfileFields) {
+      const profileUpdate: {
+        display_name?: string | null;
+        avatar_url?: string | null;
+        bio?: string | null;
+        timezone?: string | null;
+      } = {};
+
+      if (updateUserDto.display_name !== undefined) {
+        profileUpdate.display_name = updateUserDto.display_name;
+      }
+      if (updateUserDto.avatar_url !== undefined) {
+        profileUpdate.avatar_url = updateUserDto.avatar_url;
+      }
+      if (updateUserDto.bio !== undefined) {
+        profileUpdate.bio = updateUserDto.bio;
+      }
+      if (updateUserDto.timezone !== undefined) {
+        profileUpdate.timezone = updateUserDto.timezone;
+      }
+
       await this.db
         .insertInto('auth.user_profiles')
-        .values({
-          user_id: id,
-          display_name: updateUserDto.display_name ?? null,
-          avatar_url: updateUserDto.avatar_url ?? null,
-          bio: updateUserDto.bio ?? null,
-          timezone: updateUserDto.timezone ?? null,
-        })
-        .onConflict((oc) =>
-          oc.column('user_id').doUpdateSet({
-            display_name: updateUserDto.display_name ?? null,
-            avatar_url: updateUserDto.avatar_url ?? null,
-            bio: updateUserDto.bio ?? null,
-            timezone: updateUserDto.timezone ?? null,
-          }),
-        )
+        .values({ user_id: id, ...profileUpdate })
+        .onConflict((oc) => oc.column('user_id').doUpdateSet(profileUpdate))
         .executeTakeFirst();
     }
 

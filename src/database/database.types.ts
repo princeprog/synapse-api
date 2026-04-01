@@ -61,7 +61,7 @@ export interface AuthUsers {
   id: Generated<string>;
   is_active: Generated<boolean>;
   password_hash: string;
-  status: Generated<string>;
+  status: Generated<'active' | 'offline'>;
   username: string;
 }
 

@@ -2,9 +2,9 @@ export class UpdateUserDto {
   username?: string;
   email?: string;
   password?: string;
-  status?: string;
+  status?: 'active' | 'offline';
   display_name?: string;
-  avatar_url?: string;
+  avatar_url?: string | null;
   bio?: string;
-  timezone?: string;
+  timezone?: string | null;
 }
