@@ -23,6 +23,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 @Controller('users')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
+@ApiTags('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
@@ -72,7 +73,7 @@ export class UsersController {
 
   @Patch(':id')
   update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
-    return this.usersService.update(+id, updateUserDto);
+    return this.usersService.updateUser(id, updateUserDto);
   }
 
   @Delete(':id')

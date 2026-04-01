@@ -3,13 +3,18 @@
  * Please do not edit it manually.
  */
 
-import type { ColumnType } from "kysely";
+import type { ColumnType } from 'kysely';
 
-export type Generated<T> = T extends ColumnType<infer S, infer I, infer U>
-  ? ColumnType<S, I | undefined, U>
-  : ColumnType<T, T | undefined, T>;
+export type Generated<T> =
+  T extends ColumnType<infer S, infer I, infer U>
+    ? ColumnType<S, I | undefined, U>
+    : ColumnType<T, T | undefined, T>;
 
-export type Int8 = ColumnType<string, bigint | number | string, bigint | number | string>;
+export type Int8 = ColumnType<
+  string,
+  bigint | number | string,
+  bigint | number | string
+>;
 
 export type Json = JsonValue;
 
@@ -42,12 +47,21 @@ export interface AuthSession {
   user_id: string;
 }
 
+export interface AuthUserProfiles {
+  avatar_url: string | null;
+  bio: string | null;
+  display_name: string | null;
+  timezone: string | null;
+  user_id: string;
+}
+
 export interface AuthUsers {
   created_at: Generated<Timestamp>;
   email: string;
   id: Generated<string>;
   is_active: Generated<boolean>;
   password_hash: string;
+  status: Generated<string>;
   username: string;
 }
 
@@ -182,20 +196,21 @@ export interface WorkspacesWorkspaces {
 }
 
 export interface DB {
-  "auth.activity_log": AuthActivityLog;
-  "auth.session": AuthSession;
-  "auth.users": AuthUsers;
-  "chat.attachments": ChatAttachments;
-  "chat.messages": ChatMessages;
-  "chat.reactions": ChatReactions;
-  "docs.page_blocks": DocsPageBlocks;
-  "docs.pages": DocsPages;
-  "notifications.deliveries": NotificationsDeliveries;
-  "notifications.events": NotificationsEvents;
-  "tasks.tasks": TasksTasks;
+  'auth.activity_log': AuthActivityLog;
+  'auth.session': AuthSession;
+  'auth.user_profiles': AuthUserProfiles;
+  'auth.users': AuthUsers;
+  'chat.attachments': ChatAttachments;
+  'chat.messages': ChatMessages;
+  'chat.reactions': ChatReactions;
+  'docs.page_blocks': DocsPageBlocks;
+  'docs.pages': DocsPages;
+  'notifications.deliveries': NotificationsDeliveries;
+  'notifications.events': NotificationsEvents;
+  'tasks.tasks': TasksTasks;
   users: Users;
-  "workspaces.channels": WorkspacesChannels;
-  "workspaces.workspace_invitations": WorkspacesWorkspaceInvitations;
-  "workspaces.workspace_members": WorkspacesWorkspaceMembers;
-  "workspaces.workspaces": WorkspacesWorkspaces;
+  'workspaces.channels': WorkspacesChannels;
+  'workspaces.workspace_invitations': WorkspacesWorkspaceInvitations;
+  'workspaces.workspace_members': WorkspacesWorkspaceMembers;
+  'workspaces.workspaces': WorkspacesWorkspaces;
 }
