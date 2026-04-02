@@ -18,7 +18,7 @@ type PublishNotificationEventInput = {
   entityType: string;
   entityId?: string;
   payload: Record<string, JsonValue>;
-  recipientUserIds: string[];
+  recipientUserId: string | null;
 };
 
 @Injectable()
@@ -29,11 +29,10 @@ export class NotificationsService {
   ) {}
 
   async publishEvent(input: PublishNotificationEventInput) {
-    const recipients = [...new Set(input.recipientUserIds.filter(Boolean))];
-
-    if (recipients.length === 0) {
-      return null;
+    if(!input.recipientUserId) {
+      return
     }
+
 
     const event = await this.db
       .insertInto('notifications.events')
@@ -59,15 +58,13 @@ export class NotificationsService {
 
     await this.db
       .insertInto('notifications.deliveries')
-      .values(
-        recipients.map((recipientUserId) => ({
+      .values({
           event_id: event.id,
-          recipient_user_id: recipientUserId,
-        })),
-      )
+          recipient_user_id: input.recipientUserId,
+      })
       .execute();
 
-    this.notificationsGateway.emitToUsers(recipients, 'notification.created', {
+    this.notificationsGateway.emitToUsers([input.recipientUserId], 'notification.created', {
       eventId: event.id,
       eventType: event.event_type,
       workspaceId: event.workspace_id,
@@ -86,6 +83,7 @@ export class NotificationsService {
       .selectFrom('notifications.deliveries as d')
       .innerJoin('notifications.events as e', 'e.id', 'd.event_id')
       .leftJoin('workspaces.workspaces as w', 'w.id', 'e.workspace_id')
+      .innerJoin('workspaces.workspace_invitations as wi', 'wi.workspace_id', 'w.id')
       .select([
         'd.id as delivery_id',
         'e.id as event_id',
@@ -96,8 +94,9 @@ export class NotificationsService {
         'w.id as workspace_id',
         'w.name as workspace_name',
         'w.slug as workspace_slug',
-      ])
+      ]) 
       .where('d.recipient_user_id', '=', userId)
+      .where('wi.status', 'in', ['accepted','pending'])
       .orderBy('e.created_at', 'desc')
       .limit(limit)
       .execute();
