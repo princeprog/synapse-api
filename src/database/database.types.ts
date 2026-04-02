@@ -78,6 +78,17 @@ export interface ChatReactions {
   user_id: string;
 }
 
+export interface ChatUserChatMessages {
+  channel_id: Int8 | null;
+  content: string | null;
+  created_at: Timestamp | null;
+  id: Int8 | null;
+  is_edited: boolean | null;
+  parent_id: Int8 | null;
+  sender_id: string | null;
+  username: string | null;
+}
+
 export interface DocsPageBlocks {
   content: Json;
   id: Generated<string>;
@@ -188,6 +199,7 @@ export interface DB {
   "chat.attachments": ChatAttachments;
   "chat.messages": ChatMessages;
   "chat.reactions": ChatReactions;
+  "chat.user_chat_messages": ChatUserChatMessages;
   "docs.page_blocks": DocsPageBlocks;
   "docs.pages": DocsPages;
   "notifications.deliveries": NotificationsDeliveries;

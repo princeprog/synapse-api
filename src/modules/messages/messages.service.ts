@@ -4,7 +4,7 @@ import { UpdateMessageDto } from './dto/update-message.dto';
 import { DATABASE_TOKEN } from 'src/database/database.module';
 import { Kysely, Selectable } from 'kysely';
 import { DB } from 'src/database/database.types';
-import { Message } from 'src/database/schema';
+import { Message, User, UserChatMessages } from 'src/database/schema';
 import { NotFoundException,ForbiddenException } from '@nestjs/common';
 
 @Injectable()
@@ -31,6 +31,30 @@ export class MessagesService {
       created_at: row.created_at,
     };
   }
+
+  private CreatedMessageRow(row: {
+    id: string | null;
+    channel_id: string | null;
+    sender_id: string | null;
+    parent_id: string | null;
+    content: string | null;
+    is_edited: boolean | null;
+    created_at: Date | null;
+    username: string | null;  
+  }): UserChatMessages {
+    return {
+      id: String(row.id),
+      channel_id: String(row.channel_id),
+      sender_id: row.sender_id,
+      parent_id: row.parent_id === null ? null : String(row.parent_id),
+      content: row.content,
+      is_edited: row.is_edited,
+      created_at: row.created_at,
+      username: row.username,
+    };
+  }
+
+  
 
   private async resolveWorkspaceForMember(workspaceSlug: string, userId: string) {
     const workspace = await this.db
@@ -92,7 +116,7 @@ export class MessagesService {
     workspaceSlug: string,
     channelId: string,
     dto: CreateMessageDto,
-  ): Promise<Message> {
+  ): Promise<UserChatMessages> {
     const workspace = await this.resolveWorkspaceForMember(workspaceSlug, userId);
     await this.findChannelById(workspace.id, channelId);
 
@@ -123,25 +147,31 @@ export class MessagesService {
       .returningAll()
       .executeTakeFirstOrThrow();
 
-    return this.mapMessageRow(created);
+      const message = await this.db
+        .selectFrom('chat.user_chat_messages')
+        .selectAll()
+        .where('id', '=', created.id)
+        .executeTakeFirstOrThrow();
+
+    return this.CreatedMessageRow(message);
   }
 
   async findAllForChannel(
     userId: string,
     workspaceSlug: string,
     channelId: string,
-  ): Promise<Message[]> {
+  ): Promise<UserChatMessages[]> {
     const workspace = await this.resolveWorkspaceForMember(workspaceSlug, userId);
     await this.findChannelById(workspace.id, channelId);
 
     const messages = await this.db
-      .selectFrom('chat.messages')
+      .selectFrom('chat.user_chat_messages')
       .selectAll()
       .where('channel_id', '=', channelId)
       .orderBy('created_at', 'asc')
       .execute();
 
-    return messages.map((message) => this.mapMessageRow(message));
+    return messages.map((message) => this.CreatedMessageRow(message));
   }
 
   async updateForChannel(
