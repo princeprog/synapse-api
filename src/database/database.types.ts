@@ -92,6 +92,17 @@ export interface ChatReactions {
   user_id: string;
 }
 
+export interface ChatUserChatMessages {
+  channel_id: Int8 | null;
+  content: string | null;
+  created_at: Timestamp | null;
+  id: Int8 | null;
+  is_edited: boolean | null;
+  parent_id: Int8 | null;
+  sender_id: string | null;
+  username: string | null;
+}
+
 export interface DocsPageBlocks {
   content: Json;
   id: Generated<string>;

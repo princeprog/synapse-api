@@ -14,6 +14,7 @@ import type {
   WorkspacesWorkspaces,
   Users,
   TasksTasks,
+  ChatUserChatMessages,
 } from './database.types';
 
 export type User = Selectable<AuthUsers>;
@@ -21,3 +22,4 @@ export type NewUser = Insertable<AuthUsers>;
 export type UpdateUser = Updateable<AuthUsers>;
 
 export type Message = Selectable<ChatMessages>
+export type UserChatMessages = Selectable<ChatUserChatMessages>
