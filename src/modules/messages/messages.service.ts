@@ -4,7 +4,6 @@ import { UpdateMessageDto } from './dto/update-message.dto';
 import { DATABASE_TOKEN } from 'src/database/database.module';
 import { Kysely } from 'kysely';
 import { DB } from 'src/database/database.types';
-<<<<<<< HEAD
 import {
   Message,
   MessageParentContext,
@@ -45,10 +44,8 @@ type MessageSearchFilters = {
   date?: string;
   tag?: string;
 };
-=======
 import { Message, User, UserChatMessages } from 'src/database/schema';
 import { NotFoundException,ForbiddenException } from '@nestjs/common';
->>>>>>> a329bb6 (Added views for the chat messages,)
 
 @Injectable()
 export class MessagesService {

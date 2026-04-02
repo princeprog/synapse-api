@@ -28,7 +28,7 @@ export class NotificationsService {
   constructor(
     @Inject(DATABASE_TOKEN) private readonly db: Kysely<DB>,
     private readonly notificationsGateway: NotificationsGateway,
-  ) {}
+  ) { }
 
   async publishEvent(input: PublishNotificationEventInput) {
     if (!input.recipientUserId) {
@@ -123,7 +123,7 @@ export class NotificationsService {
       ])
       ]) 
       .where('d.recipient_user_id', '=', userId)
-      .where('wi.status', 'in', ['accepted','pending'])
+      .where('wi.status', 'in', ['accepted', 'pending'])
       .orderBy('e.created_at', 'desc')
       .limit(limit)
       .execute();
@@ -139,10 +139,10 @@ export class NotificationsService {
         createdAt: row.created_at,
         workspace: row.workspace_id
           ? {
-              id: row.workspace_id,
-              name: row.workspace_name,
-              slug: row.workspace_slug,
-            }
+            id: row.workspace_id,
+            name: row.workspace_name,
+            slug: row.workspace_slug,
+          }
           : null,
         invitation,
         status: row.invitation_status ?? row.delivery_status,
@@ -151,6 +151,8 @@ export class NotificationsService {
           row.workspace_name,
           row.invitation_status,
         ),
+        status: row.invitation_status,
+        message: this.buildMessage(row.event_type, row.workspace_name, row.invitation_status),
       };
     });
   }
@@ -195,11 +197,13 @@ export class NotificationsService {
     workspaceName: string | null,
     invitationStatus: string | null,
   ) {
+  private buildMessage(eventType: string, workspaceName: string | null, invitationStatus: string | null) {
     const workspaceLabel = workspaceName ?? 'a workspace';
 
     switch (eventType) {
       case 'workspace.invite.created':
         if (invitationStatus === 'pending') {
+        if(invitationStatus === 'pending') {
           return `You have been invited to join ${workspaceLabel}.`;
         }
         return `You have accepted an invitation to ${workspaceLabel}.`;

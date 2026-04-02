@@ -55,11 +55,8 @@ type ThreadPayload = ChannelPayload & {
 
 @WebSocketGateway({
   namespace: '/messages',
-<<<<<<< HEAD
   cors: {
-=======
   cors:{
->>>>>>> a329bb6 (Added views for the chat messages,)
     origin: ['http://localhost:3000', 'http://localhost:3001'],
     credentials: true,
   },
