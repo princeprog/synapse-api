@@ -24,6 +24,7 @@ export type User = Selectable<AuthUsers>;
 export type NewUser = Insertable<AuthUsers>;
 export type UpdateUser = Updateable<AuthUsers>;
 
+<<<<<<< HEAD
 export type Message = Selectable<ChatMessages>;
 export type MessagePin = Selectable<ChatMessagePins>;
 export type MessageTag = Selectable<ChatMessageTags>;
@@ -60,3 +61,7 @@ export type MessageWithReactions = UserChatMessages & {
   seen_by_count: number;
   seen_by_user_ids: string[];
 };
+=======
+export type Message = Selectable<ChatMessages>
+export type UserChatMessages = Selectable<ChatUserChatMessages>
+>>>>>>> a329bb6 (Added views for the chat messages,)
