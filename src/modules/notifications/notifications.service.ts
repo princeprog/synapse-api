@@ -33,7 +33,10 @@ export class NotificationsService {
   async publishEvent(input: PublishNotificationEventInput) {
     if (!input.recipientUserId) {
       return;
+    if(!input.recipientUserId) {
+      return
     }
+
 
     const event = await this.db
       .insertInto('notifications.events')
@@ -79,6 +82,21 @@ export class NotificationsService {
         createdAt: event.created_at,
       },
     );
+          event_id: event.id,
+          recipient_user_id: input.recipientUserId,
+      })
+      .execute();
+
+    this.notificationsGateway.emitToUsers([input.recipientUserId], 'notification.created', {
+      eventId: event.id,
+      eventType: event.event_type,
+      workspaceId: event.workspace_id,
+      actorUserId: event.actor_user_id,
+      entityType: event.entity_type,
+      entityId: event.entity_id,
+      payload: event.payload,
+      createdAt: event.created_at,
+    });
 
     return event;
   }
@@ -89,6 +107,7 @@ export class NotificationsService {
       .innerJoin('notifications.events as e', 'e.id', 'd.event_id')
       .leftJoin('workspaces.workspaces as w', 'w.id', 'e.workspace_id')
       .leftJoin('workspaces.workspace_invitations as wi', 'wi.id', 'e.entity_id')
+      .innerJoin('workspaces.workspace_invitations as wi', 'wi.workspace_id', 'w.id')
       .select([
         'd.id as delivery_id',
         'd.status as delivery_status',
@@ -102,7 +121,9 @@ export class NotificationsService {
         'w.slug as workspace_slug',
         'wi.status as invitation_status',
       ])
+      ]) 
       .where('d.recipient_user_id', '=', userId)
+      .where('wi.status', 'in', ['accepted','pending'])
       .orderBy('e.created_at', 'desc')
       .limit(limit)
       .execute();
