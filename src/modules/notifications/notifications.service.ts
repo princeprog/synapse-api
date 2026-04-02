@@ -26,10 +26,10 @@ export class NotificationsService {
   constructor(
     @Inject(DATABASE_TOKEN) private readonly db: Kysely<DB>,
     private readonly notificationsGateway: NotificationsGateway,
-  ) {}
+  ) { }
 
   async publishEvent(input: PublishNotificationEventInput) {
-    if(!input.recipientUserId) {
+    if (!input.recipientUserId) {
       return
     }
 
@@ -59,8 +59,8 @@ export class NotificationsService {
     await this.db
       .insertInto('notifications.deliveries')
       .values({
-          event_id: event.id,
-          recipient_user_id: input.recipientUserId,
+        event_id: event.id,
+        recipient_user_id: input.recipientUserId,
       })
       .execute();
 
@@ -94,9 +94,10 @@ export class NotificationsService {
         'w.id as workspace_id',
         'w.name as workspace_name',
         'w.slug as workspace_slug',
-      ]) 
+        'wi.status as invitation_status',
+      ])
       .where('d.recipient_user_id', '=', userId)
-      .where('wi.status', 'in', ['accepted','pending'])
+      .where('wi.status', 'in', ['accepted', 'pending'])
       .orderBy('e.created_at', 'desc')
       .limit(limit)
       .execute();
@@ -112,13 +113,14 @@ export class NotificationsService {
         createdAt: row.created_at,
         workspace: row.workspace_id
           ? {
-              id: row.workspace_id,
-              name: row.workspace_name,
-              slug: row.workspace_slug,
-            }
+            id: row.workspace_id,
+            name: row.workspace_name,
+            slug: row.workspace_slug,
+          }
           : null,
         invitation,
-        message: this.buildMessage(row.event_type, row.workspace_name),
+        status: row.invitation_status,
+        message: this.buildMessage(row.event_type, row.workspace_name, row.invitation_status),
       };
     });
   }
@@ -158,12 +160,15 @@ export class NotificationsService {
     };
   }
 
-  private buildMessage(eventType: string, workspaceName: string | null) {
+  private buildMessage(eventType: string, workspaceName: string | null, invitationStatus: string | null) {
     const workspaceLabel = workspaceName ?? 'a workspace';
 
     switch (eventType) {
       case 'workspace.invite.created':
-        return `You have a workspace invitation to ${workspaceLabel}.`;
+        if(invitationStatus === 'pending') {
+          return `You have been invited to join ${workspaceLabel}.`;
+        }
+        return `You have accepted an invitation to ${workspaceLabel}.`;
       case 'workspace.invite.accepted':
         return `An invitation was accepted in ${workspaceLabel}.`;
       case 'workspace.invite.declined':
