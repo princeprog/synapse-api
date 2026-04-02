@@ -118,7 +118,10 @@ export interface ChatUserChatMessages {
   content: string | null;
   created_at: Timestamp | null;
   id: Int8 | null;
+<<<<<<< HEAD
   is_deleted: boolean | null;
+=======
+>>>>>>> a329bb6 (Added views for the chat messages,)
   is_edited: boolean | null;
   parent_id: Int8 | null;
   sender_id: string | null;
