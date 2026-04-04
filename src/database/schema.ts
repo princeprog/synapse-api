@@ -35,6 +35,14 @@ export type MessageReactionGroup = {
   reactors: MessageReactionActor[];
 };
 
+export type MessageParentContext = {
+  id: string;
+  username: string | null;
+  content: string | null;
+  exists: boolean;
+};
+
 export type MessageWithReactions = UserChatMessages & {
   reactions: MessageReactionGroup[];
+  parent_context: MessageParentContext | null;
 };
