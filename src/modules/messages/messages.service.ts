@@ -2,15 +2,20 @@ import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import { CreateMessageDto } from './dto/create-message.dto';
 import { UpdateMessageDto } from './dto/update-message.dto';
 import { DATABASE_TOKEN } from 'src/database/database.module';
-import { Kysely, Selectable } from 'kysely';
+import { Kysely } from 'kysely';
 import { DB } from 'src/database/database.types';
-import { Message, User, UserChatMessages } from 'src/database/schema';
-import { NotFoundException,ForbiddenException } from '@nestjs/common';
+import {
+  Message,
+  MessageReactionActor,
+  MessageReactionGroup,
+  MessageWithReactions,
+  UserChatMessages,
+} from 'src/database/schema';
+import { NotFoundException, ForbiddenException } from '@nestjs/common';
 
 @Injectable()
 export class MessagesService {
-
-  constructor(@Inject(DATABASE_TOKEN) private readonly db: Kysely<DB>){}
+  constructor(@Inject(DATABASE_TOKEN) private readonly db: Kysely<DB>) {}
 
   private mapMessageRow(row: {
     id: string | number | bigint;
@@ -32,7 +37,7 @@ export class MessagesService {
     };
   }
 
-  private CreatedMessageRow(row: {
+  private mapUserChatMessageRow(row: {
     id: string | null;
     channel_id: string | null;
     sender_id: string | null;
@@ -40,7 +45,7 @@ export class MessagesService {
     content: string | null;
     is_edited: boolean | null;
     created_at: Date | null;
-    username: string | null;  
+    username: string | null;
   }): UserChatMessages {
     return {
       id: String(row.id),
@@ -54,9 +59,108 @@ export class MessagesService {
     };
   }
 
-  
+  private mapMessageWithReactions(
+    row: {
+      id: string | null;
+      channel_id: string | null;
+      sender_id: string | null;
+      parent_id: string | null;
+      content: string | null;
+      is_edited: boolean | null;
+      created_at: Date | null;
+      username: string | null;
+    },
+    reactions: MessageReactionGroup[],
+  ): MessageWithReactions {
+    return {
+      ...this.mapUserChatMessageRow(row),
+      reactions,
+    };
+  }
 
-  private async resolveWorkspaceForMember(workspaceSlug: string, userId: string) {
+  private normalizeEmoji(emoji: string): string {
+    const normalized = emoji.trim();
+    if (!normalized) {
+      throw new BadRequestException('Emoji is required');
+    }
+
+    // Keep emoji storage bounded without restricting valid unicode emojis.
+    if (normalized.length > 32) {
+      throw new BadRequestException('Emoji is invalid');
+    }
+
+    return normalized;
+  }
+
+  private async buildReactionsMap(
+    messageIds: string[],
+  ): Promise<Record<string, MessageReactionGroup[]>> {
+    if (messageIds.length === 0) {
+      return {};
+    }
+
+    const rows = await this.db
+      .selectFrom('chat.reactions as r')
+      .innerJoin('auth.users as u', 'u.id', 'r.user_id')
+      .select([
+        'r.message_id as message_id',
+        'r.emoji as emoji',
+        'r.user_id as user_id',
+        'u.username as username',
+      ])
+      .where('r.message_id', 'in', messageIds)
+      .orderBy('r.created_at', 'asc')
+      .execute();
+
+    const grouped: Record<string, Record<string, MessageReactionActor[]>> = {};
+
+    for (const row of rows) {
+      const messageId = String(row.message_id);
+      const emoji = row.emoji;
+
+      if (!grouped[messageId]) {
+        grouped[messageId] = {};
+      }
+
+      if (!grouped[messageId][emoji]) {
+        grouped[messageId][emoji] = [];
+      }
+
+      grouped[messageId][emoji].push({
+        user_id: row.user_id,
+        username: row.username,
+      });
+    }
+
+    const reactionsMap: Record<string, MessageReactionGroup[]> = {};
+
+    for (const messageId of Object.keys(grouped)) {
+      const emojiMap = grouped[messageId];
+      const groups: MessageReactionGroup[] = Object.entries(emojiMap).map(
+        ([emoji, reactors]) => ({
+          emoji,
+          count: reactors.length,
+          reactors,
+        }),
+      );
+
+      reactionsMap[messageId] = groups;
+    }
+
+    return reactionsMap;
+  }
+
+  private async getReactionsForMessage(
+    messageId: string,
+  ): Promise<MessageReactionGroup[]> {
+    const map = await this.buildReactionsMap([messageId]);
+    return map[messageId] ?? [];
+  }
+
+  private async resolveWorkspaceForMember(
+    workspaceSlug: string,
+    userId: string,
+  ) {
     const workspace = await this.db
       .selectFrom('workspaces.workspaces as w')
       .innerJoin('workspaces.workspace_members as wm', (join) =>
@@ -107,17 +211,22 @@ export class MessagesService {
 
   private assertOwner(messageSenderId: string, currentUserId: string) {
     if (messageSenderId !== currentUserId) {
-      throw new ForbiddenException('You can only edit or delete your own messages');
+      throw new ForbiddenException(
+        'You can only edit or delete your own messages',
+      );
     }
   }
-  
+
   async createForChannel(
     userId: string,
     workspaceSlug: string,
     channelId: string,
     dto: CreateMessageDto,
-  ): Promise<UserChatMessages> {
-    const workspace = await this.resolveWorkspaceForMember(workspaceSlug, userId);
+  ): Promise<MessageWithReactions> {
+    const workspace = await this.resolveWorkspaceForMember(
+      workspaceSlug,
+      userId,
+    );
     await this.findChannelById(workspace.id, channelId);
 
     const content = dto.content?.trim();
@@ -147,21 +256,24 @@ export class MessagesService {
       .returningAll()
       .executeTakeFirstOrThrow();
 
-      const message = await this.db
-        .selectFrom('chat.user_chat_messages')
-        .selectAll()
-        .where('id', '=', created.id)
-        .executeTakeFirstOrThrow();
+    const message = await this.db
+      .selectFrom('chat.user_chat_messages')
+      .selectAll()
+      .where('id', '=', created.id)
+      .executeTakeFirstOrThrow();
 
-    return this.CreatedMessageRow(message);
+    return this.mapMessageWithReactions(message, []);
   }
 
   async findAllForChannel(
     userId: string,
     workspaceSlug: string,
     channelId: string,
-  ): Promise<UserChatMessages[]> {
-    const workspace = await this.resolveWorkspaceForMember(workspaceSlug, userId);
+  ): Promise<MessageWithReactions[]> {
+    const workspace = await this.resolveWorkspaceForMember(
+      workspaceSlug,
+      userId,
+    );
     await this.findChannelById(workspace.id, channelId);
 
     const messages = await this.db
@@ -171,7 +283,19 @@ export class MessagesService {
       .orderBy('created_at', 'asc')
       .execute();
 
-    return messages.map((message) => this.CreatedMessageRow(message));
+    const messageIds = messages
+      .map((message) => (message.id === null ? null : String(message.id)))
+      .filter((messageId): messageId is string => Boolean(messageId));
+
+    const reactionsMap = await this.buildReactionsMap(messageIds);
+
+    return messages.map((message) => {
+      const messageId = message.id === null ? '' : String(message.id);
+      return this.mapMessageWithReactions(
+        message,
+        reactionsMap[messageId] ?? [],
+      );
+    });
   }
 
   async updateForChannel(
@@ -180,15 +304,26 @@ export class MessagesService {
     channelId: string,
     messageId: string,
     dto: UpdateMessageDto,
-  ): Promise<Message> {
-    const workspace = await this.resolveWorkspaceForMember(workspaceSlug, userId);
+  ): Promise<MessageWithReactions> {
+    const workspace = await this.resolveWorkspaceForMember(
+      workspaceSlug,
+      userId,
+    );
     await this.findChannelById(workspace.id, channelId);
 
     const existing = await this.findMessageById(channelId, messageId);
     this.assertOwner(existing.sender_id, userId);
 
+    const existingReactions = await this.getReactionsForMessage(messageId);
+
     if (dto.content === undefined) {
-      return this.mapMessageRow(existing);
+      const existingWithUser = await this.db
+        .selectFrom('chat.user_chat_messages')
+        .selectAll()
+        .where('id', '=', existing.id)
+        .executeTakeFirstOrThrow();
+
+      return this.mapMessageWithReactions(existingWithUser, existingReactions);
     }
 
     const content = dto.content.trim();
@@ -196,7 +331,7 @@ export class MessagesService {
       throw new BadRequestException('Message content cannot be empty');
     }
 
-    const updated = await this.db
+    await this.db
       .updateTable('chat.messages')
       .set({
         content,
@@ -204,10 +339,15 @@ export class MessagesService {
       })
       .where('channel_id', '=', channelId)
       .where('id', '=', messageId)
-      .returningAll()
       .executeTakeFirstOrThrow();
 
-    return this.mapMessageRow(updated);
+    const updatedWithUser = await this.db
+      .selectFrom('chat.user_chat_messages')
+      .selectAll()
+      .where('id', '=', messageId)
+      .executeTakeFirstOrThrow();
+
+    return this.mapMessageWithReactions(updatedWithUser, existingReactions);
   }
 
   async removeForChannel(
@@ -216,7 +356,10 @@ export class MessagesService {
     channelId: string,
     messageId: string,
   ): Promise<{ message: string; id: string }> {
-    const workspace = await this.resolveWorkspaceForMember(workspaceSlug, userId);
+    const workspace = await this.resolveWorkspaceForMember(
+      workspaceSlug,
+      userId,
+    );
     await this.findChannelById(workspace.id, channelId);
 
     const existing = await this.findMessageById(channelId, messageId);
@@ -233,7 +376,121 @@ export class MessagesService {
       id: messageId,
     };
   }
-  
+
+  async getMessageReactionsForChannel(
+    userId: string,
+    workspaceSlug: string,
+    channelId: string,
+    messageId: string,
+  ): Promise<{ messageId: string; reactions: MessageReactionGroup[] }> {
+    const workspace = await this.resolveWorkspaceForMember(
+      workspaceSlug,
+      userId,
+    );
+    await this.findChannelById(workspace.id, channelId);
+    await this.findMessageById(channelId, messageId);
+
+    const reactions = await this.getReactionsForMessage(messageId);
+
+    return {
+      messageId,
+      reactions,
+    };
+  }
+
+  async getMessageReactionUsersForChannel(
+    userId: string,
+    workspaceSlug: string,
+    channelId: string,
+    messageId: string,
+    emoji: string,
+  ): Promise<{
+    messageId: string;
+    emoji: string;
+    reactors: MessageReactionActor[];
+    count: number;
+  }> {
+    const workspace = await this.resolveWorkspaceForMember(
+      workspaceSlug,
+      userId,
+    );
+    await this.findChannelById(workspace.id, channelId);
+    await this.findMessageById(channelId, messageId);
+
+    const normalizedEmoji = this.normalizeEmoji(emoji);
+    const reactions = await this.getReactionsForMessage(messageId);
+    const reactionGroup = reactions.find(
+      (reaction) => reaction.emoji === normalizedEmoji,
+    );
+
+    return {
+      messageId,
+      emoji: normalizedEmoji,
+      reactors: reactionGroup?.reactors ?? [],
+      count: reactionGroup?.count ?? 0,
+    };
+  }
+
+  async toggleReactionForChannel(
+    userId: string,
+    workspaceSlug: string,
+    channelId: string,
+    messageId: string,
+    emoji: string,
+  ): Promise<{
+    messageId: string;
+    emoji: string;
+    action: 'added' | 'removed';
+    reactions: MessageReactionGroup[];
+  }> {
+    const workspace = await this.resolveWorkspaceForMember(
+      workspaceSlug,
+      userId,
+    );
+    await this.findChannelById(workspace.id, channelId);
+    await this.findMessageById(channelId, messageId);
+
+    const normalizedEmoji = this.normalizeEmoji(emoji);
+
+    const action = await this.db.transaction().execute(async (trx) => {
+      const existingReaction = await trx
+        .selectFrom('chat.reactions')
+        .select(['id'])
+        .where('message_id', '=', messageId)
+        .where('user_id', '=', userId)
+        .where('emoji', '=', normalizedEmoji)
+        .executeTakeFirst();
+
+      if (existingReaction) {
+        await trx
+          .deleteFrom('chat.reactions')
+          .where('id', '=', existingReaction.id)
+          .executeTakeFirst();
+        return 'removed' as const;
+      }
+
+      await trx
+        .insertInto('chat.reactions')
+        .values({
+          message_id: messageId,
+          user_id: userId,
+          emoji: normalizedEmoji,
+        })
+        .executeTakeFirst();
+
+      return 'added' as const;
+    });
+
+    const reactions = await this.getReactionsForMessage(messageId);
+
+    return {
+      messageId,
+      emoji: normalizedEmoji,
+      action,
+      reactions,
+    };
+  }
+
   findAll() {
     return `This action returns all messages`;
   }

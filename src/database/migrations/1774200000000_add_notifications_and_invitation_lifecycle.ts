@@ -20,7 +20,9 @@ export async function up(db: Kysely<any>): Promise<void> {
     )
     .addColumn('entity_type', 'varchar', (col) => col.notNull())
     .addColumn('entity_id', 'uuid')
-    .addColumn('payload_version', 'integer', (col) => col.notNull().defaultTo(1))
+    .addColumn('payload_version', 'integer', (col) =>
+      col.notNull().defaultTo(1),
+    )
     .addColumn('payload', 'jsonb', (col) =>
       col.notNull().defaultTo(sql`'{}'::jsonb`),
     )
@@ -63,10 +65,7 @@ export async function up(db: Kysely<any>): Promise<void> {
       col.primaryKey().defaultTo(sql`gen_random_uuid()`),
     )
     .addColumn('event_id', 'uuid', (col) =>
-      col
-        .notNull()
-        .references('notifications.events.id')
-        .onDelete('cascade'),
+      col.notNull().references('notifications.events.id').onDelete('cascade'),
     )
     .addColumn('recipient_user_id', 'uuid', (col) =>
       col.notNull().references('auth.users.id').onDelete('cascade'),

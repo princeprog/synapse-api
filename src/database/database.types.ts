@@ -214,6 +214,7 @@ export interface DB {
   'chat.attachments': ChatAttachments;
   'chat.messages': ChatMessages;
   'chat.reactions': ChatReactions;
+  'chat.user_chat_messages': ChatUserChatMessages;
   'docs.page_blocks': DocsPageBlocks;
   'docs.pages': DocsPages;
   'notifications.deliveries': NotificationsDeliveries;

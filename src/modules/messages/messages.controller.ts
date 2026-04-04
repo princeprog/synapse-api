@@ -88,4 +88,53 @@ export class MessagesController {
       messageId,
     );
   }
+
+  @Post(':messageId/reactions/:emoji')
+  toggleReaction(
+    @Request() req: AuthenticatedRequest,
+    @Param('workspaceSlug') workspaceSlug: string,
+    @Param('channelId') channelId: string,
+    @Param('messageId') messageId: string,
+    @Param('emoji') emoji: string,
+  ) {
+    return this.messagesService.toggleReactionForChannel(
+      req.user.userId,
+      workspaceSlug,
+      channelId,
+      messageId,
+      decodeURIComponent(emoji),
+    );
+  }
+
+  @Get(':messageId/reactions')
+  getReactions(
+    @Request() req: AuthenticatedRequest,
+    @Param('workspaceSlug') workspaceSlug: string,
+    @Param('channelId') channelId: string,
+    @Param('messageId') messageId: string,
+  ) {
+    return this.messagesService.getMessageReactionsForChannel(
+      req.user.userId,
+      workspaceSlug,
+      channelId,
+      messageId,
+    );
+  }
+
+  @Get(':messageId/reactions/:emoji/users')
+  getReactionUsers(
+    @Request() req: AuthenticatedRequest,
+    @Param('workspaceSlug') workspaceSlug: string,
+    @Param('channelId') channelId: string,
+    @Param('messageId') messageId: string,
+    @Param('emoji') emoji: string,
+  ) {
+    return this.messagesService.getMessageReactionUsersForChannel(
+      req.user.userId,
+      workspaceSlug,
+      channelId,
+      messageId,
+      decodeURIComponent(emoji),
+    );
+  }
 }

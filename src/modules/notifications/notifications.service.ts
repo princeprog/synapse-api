@@ -26,13 +26,12 @@ export class NotificationsService {
   constructor(
     @Inject(DATABASE_TOKEN) private readonly db: Kysely<DB>,
     private readonly notificationsGateway: NotificationsGateway,
-  ) { }
+  ) {}
 
   async publishEvent(input: PublishNotificationEventInput) {
     if (!input.recipientUserId) {
-      return
+      return;
     }
-
 
     const event = await this.db
       .insertInto('notifications.events')
@@ -64,16 +63,20 @@ export class NotificationsService {
       })
       .execute();
 
-    this.notificationsGateway.emitToUsers([input.recipientUserId], 'notification.created', {
-      eventId: event.id,
-      eventType: event.event_type,
-      workspaceId: event.workspace_id,
-      actorUserId: event.actor_user_id,
-      entityType: event.entity_type,
-      entityId: event.entity_id,
-      payload: event.payload,
-      createdAt: event.created_at,
-    });
+    this.notificationsGateway.emitToUsers(
+      [input.recipientUserId],
+      'notification.created',
+      {
+        eventId: event.id,
+        eventType: event.event_type,
+        workspaceId: event.workspace_id,
+        actorUserId: event.actor_user_id,
+        entityType: event.entity_type,
+        entityId: event.entity_id,
+        payload: event.payload,
+        createdAt: event.created_at,
+      },
+    );
 
     return event;
   }
@@ -83,7 +86,11 @@ export class NotificationsService {
       .selectFrom('notifications.deliveries as d')
       .innerJoin('notifications.events as e', 'e.id', 'd.event_id')
       .leftJoin('workspaces.workspaces as w', 'w.id', 'e.workspace_id')
-      .innerJoin('workspaces.workspace_invitations as wi', 'wi.workspace_id', 'w.id')
+      .innerJoin(
+        'workspaces.workspace_invitations as wi',
+        'wi.workspace_id',
+        'w.id',
+      )
       .select([
         'd.id as delivery_id',
         'e.id as event_id',
@@ -113,14 +120,18 @@ export class NotificationsService {
         createdAt: row.created_at,
         workspace: row.workspace_id
           ? {
-            id: row.workspace_id,
-            name: row.workspace_name,
-            slug: row.workspace_slug,
-          }
+              id: row.workspace_id,
+              name: row.workspace_name,
+              slug: row.workspace_slug,
+            }
           : null,
         invitation,
         status: row.invitation_status,
-        message: this.buildMessage(row.event_type, row.workspace_name, row.invitation_status),
+        message: this.buildMessage(
+          row.event_type,
+          row.workspace_name,
+          row.invitation_status,
+        ),
       };
     });
   }
@@ -160,12 +171,16 @@ export class NotificationsService {
     };
   }
 
-  private buildMessage(eventType: string, workspaceName: string | null, invitationStatus: string | null) {
+  private buildMessage(
+    eventType: string,
+    workspaceName: string | null,
+    invitationStatus: string | null,
+  ) {
     const workspaceLabel = workspaceName ?? 'a workspace';
 
     switch (eventType) {
       case 'workspace.invite.created':
-        if(invitationStatus === 'pending') {
+        if (invitationStatus === 'pending') {
           return `You have been invited to join ${workspaceLabel}.`;
         }
         return `You have accepted an invitation to ${workspaceLabel}.`;
