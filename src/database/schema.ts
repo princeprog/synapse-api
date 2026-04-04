@@ -64,4 +64,5 @@ export type Message = Selectable<ChatMessages>
 export type UserChatMessages = Selectable<ChatUserChatMessages>
 export type MessageWithReactions = UserChatMessages & {
   reactions: MessageReactionGroup[];
+  parent_context: MessageParentContext | null;
 };

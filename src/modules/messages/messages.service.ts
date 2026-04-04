@@ -47,6 +47,17 @@ type MessageSearchFilters = {
 import { Message, User, UserChatMessages } from 'src/database/schema';
 import { NotFoundException,ForbiddenException } from '@nestjs/common';
 
+type UserChatMessageRow = {
+  id: string | null;
+  channel_id: string | null;
+  sender_id: string | null;
+  parent_id: string | null;
+  content: string | null;
+  is_edited: boolean | null;
+  created_at: Date | null;
+  username: string | null;
+};
+
 @Injectable()
 export class MessagesService {
   constructor(
@@ -650,6 +661,7 @@ export class MessagesService {
     rows: UserChatMessageRow[],
     options?: { includeReplyCounts?: boolean; channelId?: string },
   ) {
+  private async enrichMessages(rows: UserChatMessageRow[]) {
     const messageIds = rows
       .map((message) => (message.id === null ? null : String(message.id)))
       .filter((messageId): messageId is string => Boolean(messageId));
@@ -670,6 +682,10 @@ export class MessagesService {
         this.buildPinnedMap(messageIds),
         this.buildReadReceiptMap(messageIds),
       ]);
+    const [reactionsMap, parentContextMap] = await Promise.all([
+      this.buildReactionsMap(messageIds),
+      this.buildParentContextMap(parentIds),
+    ]);
 
     return rows.map((row) => {
       const messageId = row.id === null ? '' : String(row.id);
@@ -853,6 +869,8 @@ export class MessagesService {
         .executeTakeFirstOrThrow();
 
     return this.CreatedMessageRow(message);
+    const [enriched] = await this.enrichMessages([message]);
+    return enriched;
   }
 
   async findAllForChannel(
@@ -880,6 +898,7 @@ export class MessagesService {
       channelId,
     });
     return messages.map((message) => this.CreatedMessageRow(message));
+    return this.enrichMessages(messages);
   }
 
   async updateForChannel(
@@ -909,6 +928,7 @@ export class MessagesService {
         includeReplyCounts: true,
         channelId,
       });
+      const [enriched] = await this.enrichMessages([existingWithUser]);
       return enriched;
     }
 
@@ -949,6 +969,7 @@ export class MessagesService {
       includeReplyCounts: true,
       channelId,
     });
+    const [enriched] = await this.enrichMessages([updatedWithUser]);
     return enriched;
   }
 
@@ -976,6 +997,7 @@ export class MessagesService {
         includeReplyCounts: true,
         channelId,
       }),
+      replies: await this.enrichMessages(replies),
     };
   }
 
@@ -1048,6 +1070,7 @@ export class MessagesService {
         includeReplyCounts: true,
         channelId,
       }),
+      thread: await this.enrichMessages(threadRows),
     };
   }
 
