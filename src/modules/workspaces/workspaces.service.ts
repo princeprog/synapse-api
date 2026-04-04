@@ -382,14 +382,7 @@ export class WorkspacesService {
 
     return this.db
       .selectFrom('workspaces.workspace_invitations')
-      .select([
-        'id',
-        'email',
-        'role',
-        'status',
-        'expires_at',
-        'accepted_at',
-      ])
+      .select(['id', 'email', 'role', 'status', 'expires_at', 'accepted_at'])
       .where('workspace_id', '=', workspace.id)
       .where('status', '=', 'pending')
       .orderBy('expires_at', 'asc')
@@ -449,7 +442,9 @@ export class WorkspacesService {
         role: invitation.role,
         status: 'revoked',
       },
-      recipientUserId: invitation.invited_user_id ? invitation.invited_user_id : null,
+      recipientUserId: invitation.invited_user_id
+        ? invitation.invited_user_id
+        : null,
     });
 
     return { message: 'Invitation revoked successfully' };

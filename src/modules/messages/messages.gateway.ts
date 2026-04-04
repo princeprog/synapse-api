@@ -1,4 +1,11 @@
-import { WebSocketGateway, SubscribeMessage, MessageBody, WebSocketServer, WsException,ConnectedSocket } from '@nestjs/websockets';
+import {
+  WebSocketGateway,
+  SubscribeMessage,
+  MessageBody,
+  WebSocketServer,
+  WsException,
+  ConnectedSocket,
+} from '@nestjs/websockets';
 import { MessagesService } from './messages.service';
 import { CreateMessageDto } from './dto/create-message.dto';
 import { UpdateMessageDto } from './dto/update-message.dto';
@@ -29,43 +36,50 @@ type CreatePayload = ChannelPayload & {
   dto: CreateMessageDto;
 };
 
+type ReactionPayload = ChannelPayload & {
+  messageId: string;
+  emoji: string;
+};
+
+type ReactionsPayload = ChannelPayload & {
+  messageId: string;
+};
+
 @WebSocketGateway({
   namespace: '/messages',
-  cors:{
+  cors: {
     origin: ['http://localhost:3000', 'http://localhost:3001'],
     credentials: true,
   },
 })
 export class MessagesGateway {
-
   @WebSocketServer()
-  private server!: Server
+  private server!: Server;
 
-  private readonly logger = new Logger(MessagesGateway.name)
-
+  private readonly logger = new Logger(MessagesGateway.name);
 
   constructor(
     private readonly messagesService: MessagesService,
     private readonly jwtService: JwtService,
-    private readonly configService: ConfigService
+    private readonly configService: ConfigService,
   ) {}
 
-  handleConnection(client: Socket){
+  handleConnection(client: Socket) {
     const token = this.extractAccessToken(client.handshake.headers.cookie);
 
-    if(!token){
-      client.disconnect(true)
+    if (!token) {
+      client.disconnect(true);
       return;
     }
 
     try {
       const payload = this.jwtService.verify<AccessTokenPayload>(token, {
         secret: this.configService.getOrThrow<string>('JWT_SECRET'),
-      })
+      });
 
-      client.data.userId = payload.sub
+      client.data.userId = payload.sub;
     } catch (error) {
-      this.logger.warn('Rejected websocket connection due to invalid token')
+      this.logger.warn('Rejected websocket connection due to invalid token');
       client.disconnect(true);
     }
   }
@@ -192,10 +206,55 @@ export class MessagesGateway {
     };
   }
 
+  @SubscribeMessage('messages:reaction:toggle')
+  async toggleReaction(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() body: ReactionPayload,
+  ) {
+    const userId = this.getClientUserId(client);
+
+    const result = await this.messagesService.toggleReactionForChannel(
+      userId,
+      body.workspaceSlug,
+      body.channelId,
+      body.messageId,
+      body.emoji,
+    );
+
+    this.server
+      .to(this.getChannelRoom(body.workspaceSlug, body.channelId))
+      .emit('messages:reaction:toggled', result);
+
+    return {
+      success: true,
+      data: result,
+    };
+  }
+
+  @SubscribeMessage('messages:reactions:get')
+  async getReactions(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() body: ReactionsPayload,
+  ) {
+    const userId = this.getClientUserId(client);
+
+    const result = await this.messagesService.getMessageReactionsForChannel(
+      userId,
+      body.workspaceSlug,
+      body.channelId,
+      body.messageId,
+    );
+
+    return {
+      success: true,
+      data: result,
+    };
+  }
+
   private getClientUserId(client: Socket): string {
     const userId = client.data.userId as string | undefined;
-    if(!userId){
-      throw new WsException('Unauthenticaed socket')
+    if (!userId) {
+      throw new WsException('Unauthenticaed socket');
     }
     return userId;
   }
@@ -205,11 +264,11 @@ export class MessagesGateway {
   }
 
   private extractAccessToken(cookieHeader?: string): string | null {
-    if(!cookieHeader){
-      return null
+    if (!cookieHeader) {
+      return null;
     }
 
-    const cookiePairs = cookieHeader.split(';')
+    const cookiePairs = cookieHeader.split(';');
 
     for (const cookiePair of cookiePairs) {
       const [rawName, ...rawValueParts] = cookiePair.trim().split('=');
@@ -224,9 +283,8 @@ export class MessagesGateway {
       return decodeURIComponent(rawValueParts.join('='));
     }
 
-    return null
+    return null;
   }
-
 
   @SubscribeMessage('findAllMessages')
   findAll() {

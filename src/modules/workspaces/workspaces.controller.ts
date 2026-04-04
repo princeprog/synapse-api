@@ -87,13 +87,12 @@ export class WorkspacesController {
   @Get('notifications/me')
   @ApiOperation({
     summary: 'Get my notifications feed',
-    description: 'Retrieves realtime-backed notifications for the authenticated user.',
+    description:
+      'Retrieves realtime-backed notifications for the authenticated user.',
   })
   getMyNotifications(@Request() req: AuthenticatedRequest) {
     return this.workspacesService.findMyNotificationFeed(req.user.userId);
   }
-
-  
 
   @Get(':workspaceSlug/members')
   @ApiOperation({
@@ -143,8 +142,6 @@ export class WorkspacesController {
       memberId,
     );
   }
-
-  
 
   @Get(':id')
   findOne(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
