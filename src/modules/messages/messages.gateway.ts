@@ -45,6 +45,14 @@ type ReactionsPayload = ChannelPayload & {
   messageId: string;
 };
 
+type RepliesPayload = ChannelPayload & {
+  messageId: string;
+};
+
+type ThreadPayload = ChannelPayload & {
+  messageId: string;
+};
+
 @WebSocketGateway({
   namespace: '/messages',
   cors: {
@@ -239,6 +247,46 @@ export class MessagesGateway {
     const userId = this.getClientUserId(client);
 
     const result = await this.messagesService.getMessageReactionsForChannel(
+      userId,
+      body.workspaceSlug,
+      body.channelId,
+      body.messageId,
+    );
+
+    return {
+      success: true,
+      data: result,
+    };
+  }
+
+  @SubscribeMessage('messages:replies:get')
+  async getReplies(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() body: RepliesPayload,
+  ) {
+    const userId = this.getClientUserId(client);
+
+    const result = await this.messagesService.getMessageRepliesForChannel(
+      userId,
+      body.workspaceSlug,
+      body.channelId,
+      body.messageId,
+    );
+
+    return {
+      success: true,
+      data: result,
+    };
+  }
+
+  @SubscribeMessage('messages:thread:get')
+  async getThread(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() body: ThreadPayload,
+  ) {
+    const userId = this.getClientUserId(client);
+
+    const result = await this.messagesService.getMessageThreadForChannel(
       userId,
       body.workspaceSlug,
       body.channelId,

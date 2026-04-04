@@ -89,6 +89,36 @@ export class MessagesController {
     );
   }
 
+  @Get(':messageId/replies')
+  getReplies(
+    @Request() req: AuthenticatedRequest,
+    @Param('workspaceSlug') workspaceSlug: string,
+    @Param('channelId') channelId: string,
+    @Param('messageId') messageId: string,
+  ) {
+    return this.messagesService.getMessageRepliesForChannel(
+      req.user.userId,
+      workspaceSlug,
+      channelId,
+      messageId,
+    );
+  }
+
+  @Get(':messageId/thread')
+  getThread(
+    @Request() req: AuthenticatedRequest,
+    @Param('workspaceSlug') workspaceSlug: string,
+    @Param('channelId') channelId: string,
+    @Param('messageId') messageId: string,
+  ) {
+    return this.messagesService.getMessageThreadForChannel(
+      req.user.userId,
+      workspaceSlug,
+      channelId,
+      messageId,
+    );
+  }
+
   @Post(':messageId/reactions/:emoji')
   toggleReaction(
     @Request() req: AuthenticatedRequest,

@@ -6,12 +6,24 @@ import { Kysely } from 'kysely';
 import { DB } from 'src/database/database.types';
 import {
   Message,
+  MessageParentContext,
   MessageReactionActor,
   MessageReactionGroup,
   MessageWithReactions,
   UserChatMessages,
 } from 'src/database/schema';
 import { NotFoundException, ForbiddenException } from '@nestjs/common';
+
+type UserChatMessageRow = {
+  id: string | null;
+  channel_id: string | null;
+  sender_id: string | null;
+  parent_id: string | null;
+  content: string | null;
+  is_edited: boolean | null;
+  created_at: Date | null;
+  username: string | null;
+};
 
 @Injectable()
 export class MessagesService {
@@ -37,16 +49,7 @@ export class MessagesService {
     };
   }
 
-  private mapUserChatMessageRow(row: {
-    id: string | null;
-    channel_id: string | null;
-    sender_id: string | null;
-    parent_id: string | null;
-    content: string | null;
-    is_edited: boolean | null;
-    created_at: Date | null;
-    username: string | null;
-  }): UserChatMessages {
+  private mapUserChatMessageRow(row: UserChatMessageRow): UserChatMessages {
     return {
       id: String(row.id),
       channel_id: String(row.channel_id),
@@ -60,22 +63,62 @@ export class MessagesService {
   }
 
   private mapMessageWithReactions(
-    row: {
-      id: string | null;
-      channel_id: string | null;
-      sender_id: string | null;
-      parent_id: string | null;
-      content: string | null;
-      is_edited: boolean | null;
-      created_at: Date | null;
-      username: string | null;
-    },
+    row: UserChatMessageRow,
     reactions: MessageReactionGroup[],
+    parentContext: MessageParentContext | null,
   ): MessageWithReactions {
     return {
       ...this.mapUserChatMessageRow(row),
       reactions,
+      parent_context: parentContext,
     };
+  }
+
+  private async buildParentContextMap(
+    parentIds: string[],
+  ): Promise<Record<string, MessageParentContext>> {
+    if (parentIds.length === 0) {
+      return {};
+    }
+
+    const uniqueParentIds = [...new Set(parentIds)];
+    const parentRows = await this.db
+      .selectFrom('chat.user_chat_messages')
+      .select(['id', 'username', 'content'])
+      .where('id', 'in', uniqueParentIds)
+      .execute();
+
+    const parentContextMap: Record<string, MessageParentContext> = {};
+
+    for (const parent of parentRows) {
+      if (parent.id === null) {
+        continue;
+      }
+
+      const parentId = String(parent.id);
+      parentContextMap[parentId] = {
+        id: parentId,
+        username: parent.username,
+        content: parent.content,
+        exists: true,
+      };
+    }
+
+    for (const parentId of uniqueParentIds) {
+      if (parentContextMap[parentId]) {
+        continue;
+      }
+
+      // Parent was deleted; keep child reply visible with fallback context.
+      parentContextMap[parentId] = {
+        id: parentId,
+        username: null,
+        content: null,
+        exists: false,
+      };
+    }
+
+    return parentContextMap;
   }
 
   private normalizeEmoji(emoji: string): string {
@@ -155,6 +198,39 @@ export class MessagesService {
   ): Promise<MessageReactionGroup[]> {
     const map = await this.buildReactionsMap([messageId]);
     return map[messageId] ?? [];
+  }
+
+  private async enrichMessages(rows: UserChatMessageRow[]) {
+    const messageIds = rows
+      .map((message) => (message.id === null ? null : String(message.id)))
+      .filter((messageId): messageId is string => Boolean(messageId));
+
+    const parentIds = rows
+      .map((message) => message.parent_id)
+      .filter((parentId): parentId is string => Boolean(parentId));
+
+    const [reactionsMap, parentContextMap] = await Promise.all([
+      this.buildReactionsMap(messageIds),
+      this.buildParentContextMap(parentIds),
+    ]);
+
+    return rows.map((row) => {
+      const messageId = row.id === null ? '' : String(row.id);
+      const parentContext = row.parent_id
+        ? (parentContextMap[row.parent_id] ?? {
+            id: row.parent_id,
+            username: null,
+            content: null,
+            exists: false,
+          })
+        : null;
+
+      return this.mapMessageWithReactions(
+        row,
+        reactionsMap[messageId] ?? [],
+        parentContext,
+      );
+    });
   }
 
   private async resolveWorkspaceForMember(
@@ -262,7 +338,8 @@ export class MessagesService {
       .where('id', '=', created.id)
       .executeTakeFirstOrThrow();
 
-    return this.mapMessageWithReactions(message, []);
+    const [enriched] = await this.enrichMessages([message]);
+    return enriched;
   }
 
   async findAllForChannel(
@@ -283,19 +360,7 @@ export class MessagesService {
       .orderBy('created_at', 'asc')
       .execute();
 
-    const messageIds = messages
-      .map((message) => (message.id === null ? null : String(message.id)))
-      .filter((messageId): messageId is string => Boolean(messageId));
-
-    const reactionsMap = await this.buildReactionsMap(messageIds);
-
-    return messages.map((message) => {
-      const messageId = message.id === null ? '' : String(message.id);
-      return this.mapMessageWithReactions(
-        message,
-        reactionsMap[messageId] ?? [],
-      );
-    });
+    return this.enrichMessages(messages);
   }
 
   async updateForChannel(
@@ -314,8 +379,6 @@ export class MessagesService {
     const existing = await this.findMessageById(channelId, messageId);
     this.assertOwner(existing.sender_id, userId);
 
-    const existingReactions = await this.getReactionsForMessage(messageId);
-
     if (dto.content === undefined) {
       const existingWithUser = await this.db
         .selectFrom('chat.user_chat_messages')
@@ -323,7 +386,8 @@ export class MessagesService {
         .where('id', '=', existing.id)
         .executeTakeFirstOrThrow();
 
-      return this.mapMessageWithReactions(existingWithUser, existingReactions);
+      const [enriched] = await this.enrichMessages([existingWithUser]);
+      return enriched;
     }
 
     const content = dto.content.trim();
@@ -347,7 +411,101 @@ export class MessagesService {
       .where('id', '=', messageId)
       .executeTakeFirstOrThrow();
 
-    return this.mapMessageWithReactions(updatedWithUser, existingReactions);
+    const [enriched] = await this.enrichMessages([updatedWithUser]);
+    return enriched;
+  }
+
+  async getMessageRepliesForChannel(
+    userId: string,
+    workspaceSlug: string,
+    channelId: string,
+    messageId: string,
+  ): Promise<{ messageId: string; replies: MessageWithReactions[] }> {
+    const workspace = await this.resolveWorkspaceForMember(workspaceSlug, userId);
+    await this.findChannelById(workspace.id, channelId);
+    await this.findMessageById(channelId, messageId);
+
+    const replies = await this.db
+      .selectFrom('chat.user_chat_messages')
+      .selectAll()
+      .where('channel_id', '=', channelId)
+      .where('parent_id', '=', messageId)
+      .orderBy('created_at', 'asc')
+      .execute();
+
+    return {
+      messageId,
+      replies: await this.enrichMessages(replies),
+    };
+  }
+
+  async getMessageThreadForChannel(
+    userId: string,
+    workspaceSlug: string,
+    channelId: string,
+    rootMessageId: string,
+  ): Promise<{ rootMessageId: string; thread: MessageWithReactions[] }> {
+    const workspace = await this.resolveWorkspaceForMember(workspaceSlug, userId);
+    await this.findChannelById(workspace.id, channelId);
+    await this.findMessageById(channelId, rootMessageId);
+
+    const messages = await this.db
+      .selectFrom('chat.user_chat_messages')
+      .selectAll()
+      .where('channel_id', '=', channelId)
+      .orderBy('created_at', 'asc')
+      .execute();
+
+    const messageByParent: Record<string, UserChatMessageRow[]> = {};
+    for (const message of messages) {
+      if (!message.parent_id) {
+        continue;
+      }
+
+      if (!messageByParent[message.parent_id]) {
+        messageByParent[message.parent_id] = [];
+      }
+
+      messageByParent[message.parent_id].push(message);
+    }
+
+    const includedIds = new Set<string>([rootMessageId]);
+    const queue: string[] = [rootMessageId];
+
+    while (queue.length > 0) {
+      const currentId = queue.shift();
+      if (!currentId) {
+        continue;
+      }
+
+      const children = messageByParent[currentId] ?? [];
+      for (const child of children) {
+        if (child.id === null) {
+          continue;
+        }
+
+        const childId = String(child.id);
+        if (includedIds.has(childId)) {
+          continue;
+        }
+
+        includedIds.add(childId);
+        queue.push(childId);
+      }
+    }
+
+    const threadRows = messages.filter((message) => {
+      if (message.id === null) {
+        return false;
+      }
+
+      return includedIds.has(String(message.id));
+    });
+
+    return {
+      rootMessageId,
+      thread: await this.enrichMessages(threadRows),
+    };
   }
 
   async removeForChannel(
