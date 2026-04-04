@@ -28,7 +28,7 @@ export class NotificationsService {
   constructor(
     @Inject(DATABASE_TOKEN) private readonly db: Kysely<DB>,
     private readonly notificationsGateway: NotificationsGateway,
-  ) { }
+  ) {}
 
   async publishEvent(input: PublishNotificationEventInput) {
     if (!input.recipientUserId) {
@@ -36,7 +36,6 @@ export class NotificationsService {
     if(!input.recipientUserId) {
       return
     }
-
 
     const event = await this.db
       .insertInto('notifications.events')
@@ -108,6 +107,11 @@ export class NotificationsService {
       .leftJoin('workspaces.workspaces as w', 'w.id', 'e.workspace_id')
       .leftJoin('workspaces.workspace_invitations as wi', 'wi.id', 'e.entity_id')
       .innerJoin('workspaces.workspace_invitations as wi', 'wi.workspace_id', 'w.id')
+      .innerJoin(
+        'workspaces.workspace_invitations as wi',
+        'wi.workspace_id',
+        'w.id',
+      )
       .select([
         'd.id as delivery_id',
         'd.status as delivery_status',
@@ -139,10 +143,10 @@ export class NotificationsService {
         createdAt: row.created_at,
         workspace: row.workspace_id
           ? {
-            id: row.workspace_id,
-            name: row.workspace_name,
-            slug: row.workspace_slug,
-          }
+              id: row.workspace_id,
+              name: row.workspace_name,
+              slug: row.workspace_slug,
+            }
           : null,
         invitation,
         status: row.invitation_status ?? row.delivery_status,
@@ -152,7 +156,11 @@ export class NotificationsService {
           row.invitation_status,
         ),
         status: row.invitation_status,
-        message: this.buildMessage(row.event_type, row.workspace_name, row.invitation_status),
+        message: this.buildMessage(
+          row.event_type,
+          row.workspace_name,
+          row.invitation_status,
+        ),
       };
     });
   }

@@ -42,12 +42,21 @@ export interface AuthSession {
   user_id: string;
 }
 
+export interface AuthUserProfiles {
+  avatar_url: string | null;
+  bio: string | null;
+  display_name: string | null;
+  timezone: string | null;
+  user_id: string;
+}1
+
 export interface AuthUsers {
   created_at: Generated<Timestamp>;
   email: string;
   id: Generated<string>;
   is_active: Generated<boolean>;
   password_hash: string;
+  status: Generated<'active' | 'offline'>;
   username: string;
 }
 
@@ -118,10 +127,7 @@ export interface ChatUserChatMessages {
   content: string | null;
   created_at: Timestamp | null;
   id: Int8 | null;
-<<<<<<< HEAD
   is_deleted: boolean | null;
-=======
->>>>>>> a329bb6 (Added views for the chat messages,)
   is_edited: boolean | null;
   parent_id: Int8 | null;
   sender_id: string | null;
@@ -232,23 +238,24 @@ export interface WorkspacesWorkspaces {
 }
 
 export interface DB {
-  "auth.activity_log": AuthActivityLog;
-  "auth.session": AuthSession;
-  "auth.users": AuthUsers;
-  "chat.attachments": ChatAttachments;
-  "chat.channel_read_markers": ChatChannelReadMarkers;
-  "chat.mentions": ChatMentions;
-  "chat.message_pins": ChatMessagePins;
-  "chat.message_read_receipts": ChatMessageReadReceipts;
-  "chat.message_tags": ChatMessageTags;
-  "chat.messages": ChatMessages;
-  "chat.reactions": ChatReactions;
-  "chat.user_chat_messages": ChatUserChatMessages;
-  "docs.page_blocks": DocsPageBlocks;
-  "docs.pages": DocsPages;
-  "notifications.deliveries": NotificationsDeliveries;
-  "notifications.events": NotificationsEvents;
-  "tasks.tasks": TasksTasks;
+  'auth.activity_log': AuthActivityLog;
+  'auth.session': AuthSession;
+  'auth.user_profiles': AuthUserProfiles;
+  'auth.users': AuthUsers;
+  'chat.attachments': ChatAttachments;
+  'chat.channel_read_markers': ChatChannelReadMarkers;
+  'chat.mentions': ChatMentions;
+  'chat.message_pins': ChatMessagePins;
+  'chat.message_read_receipts': ChatMessageReadReceipts;
+  'chat.message_tags': ChatMessageTags;
+  'chat.messages': ChatMessages;
+  'chat.reactions': ChatReactions;
+  'chat.user_chat_messages': ChatUserChatMessages;
+  'docs.page_blocks': DocsPageBlocks;
+  'docs.pages': DocsPages;
+  'notifications.deliveries': NotificationsDeliveries;
+  'notifications.events': NotificationsEvents;
+  'tasks.tasks': TasksTasks;
   users: Users;
   "workspaces.channels": WorkspacesChannels;
   "workspaces.workspace_invitations": WorkspacesWorkspaceInvitations;

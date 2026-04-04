@@ -76,9 +76,7 @@ export class MessagesService {
     };
   }
 
-<<<<<<< HEAD
   private mapUserChatMessageRow(row: UserChatMessageRow): UserChatMessages {
-=======
   private CreatedMessageRow(row: {
     id: string | null;
     channel_id: string | null;
@@ -89,7 +87,6 @@ export class MessagesService {
     created_at: Date | null;
     username: string | null;  
   }): UserChatMessages {
->>>>>>> a329bb6 (Added views for the chat messages,)
     return {
       id: String(row.id),
       channel_id: String(row.channel_id),
@@ -97,16 +94,12 @@ export class MessagesService {
       parent_id: row.parent_id === null ? null : String(row.parent_id),
       content: row.content,
       is_edited: row.is_edited,
-<<<<<<< HEAD
       is_deleted: row.is_deleted,
-=======
->>>>>>> a329bb6 (Added views for the chat messages,)
       created_at: row.created_at,
       username: row.username,
     };
   }
 
-<<<<<<< HEAD
   private mapMessageWithReactions(
     row: UserChatMessageRow,
     reactions: MessageReactionGroup[],
@@ -708,11 +701,9 @@ export class MessagesService {
     workspaceSlug: string,
     userId: string,
   ) {
-=======
   
 
   private async resolveWorkspaceForMember(workspaceSlug: string, userId: string) {
->>>>>>> a329bb6 (Added views for the chat messages,)
     const workspace = await this.db
       .selectFrom('workspaces.workspaces as w')
       .innerJoin('workspaces.workspace_members as wm', (join) =>
@@ -774,16 +765,13 @@ export class MessagesService {
     workspaceSlug: string,
     channelId: string,
     dto: CreateMessageDto,
-<<<<<<< HEAD
   ): Promise<MessageWithReactions> {
     const workspace = await this.resolveWorkspaceForMember(
       workspaceSlug,
       userId,
     );
-=======
   ): Promise<UserChatMessages> {
     const workspace = await this.resolveWorkspaceForMember(workspaceSlug, userId);
->>>>>>> a329bb6 (Added views for the chat messages,)
     await this.findChannelById(workspace.id, channelId);
 
     const content = dto.content?.trim();
@@ -818,7 +806,6 @@ export class MessagesService {
       .returningAll()
       .executeTakeFirstOrThrow();
 
-<<<<<<< HEAD
     const message = await this.db
       .selectFrom('chat.user_chat_messages')
       .selectAll()
@@ -859,7 +846,6 @@ export class MessagesService {
       channelId,
     });
     return enriched;
-=======
       const message = await this.db
         .selectFrom('chat.user_chat_messages')
         .selectAll()
@@ -867,23 +853,19 @@ export class MessagesService {
         .executeTakeFirstOrThrow();
 
     return this.CreatedMessageRow(message);
->>>>>>> a329bb6 (Added views for the chat messages,)
   }
 
   async findAllForChannel(
     userId: string,
     workspaceSlug: string,
     channelId: string,
-<<<<<<< HEAD
   ): Promise<MessageWithReactions[]> {
     const workspace = await this.resolveWorkspaceForMember(
       workspaceSlug,
       userId,
     );
-=======
   ): Promise<UserChatMessages[]> {
     const workspace = await this.resolveWorkspaceForMember(workspaceSlug, userId);
->>>>>>> a329bb6 (Added views for the chat messages,)
     await this.findChannelById(workspace.id, channelId);
 
     const messages = await this.db
@@ -893,14 +875,11 @@ export class MessagesService {
       .orderBy('created_at', 'asc')
       .execute();
 
-<<<<<<< HEAD
     return this.enrichMessages(messages, {
       includeReplyCounts: true,
       channelId,
     });
-=======
     return messages.map((message) => this.CreatedMessageRow(message));
->>>>>>> a329bb6 (Added views for the chat messages,)
   }
 
   async updateForChannel(
