@@ -143,25 +143,38 @@ export class MessagesService {
     return normalized;
   }
 
-  private extractMentionUsernames(content: string): string[] {
+  private extractMentions(content: string): {
+    usernames: string[];
+    mentionsEveryone: boolean;
+  } {
     const mentionRegex = /(^|\s)@([a-zA-Z0-9_]+)/g;
     const usernames = new Set<string>();
+    let mentionsEveryone = false;
 
     for (const match of content.matchAll(mentionRegex)) {
       const username = match[2]?.trim().toLowerCase();
       if (username) {
+        if (username === 'everyone') {
+          mentionsEveryone = true;
+          continue;
+        }
+
         usernames.add(username);
       }
     }
 
-    return [...usernames];
+    return {
+      usernames: [...usernames],
+      mentionsEveryone,
+    };
   }
 
   private async resolveMentionedUserIds(
     workspaceId: string,
     usernames: string[],
+    mentionsEveryone: boolean,
   ): Promise<string[]> {
-    if (usernames.length === 0) {
+    if (usernames.length === 0 && !mentionsEveryone) {
       return [];
     }
 
@@ -178,6 +191,13 @@ export class MessagesService {
     }
 
     const mentionedUserIds: string[] = [];
+
+    if (mentionsEveryone) {
+      for (const member of members) {
+        mentionedUserIds.push(member.user_id);
+      }
+    }
+
     for (const username of usernames) {
       const userId = memberByUsername.get(username);
       if (userId) {
@@ -197,10 +217,11 @@ export class MessagesService {
     channelId: string;
     notifyNewMentions: boolean;
   }): Promise<string[]> {
-    const usernames = this.extractMentionUsernames(input.content);
+    const mentionInfo = this.extractMentions(input.content);
     const resolvedUserIds = await this.resolveMentionedUserIds(
       input.workspaceId,
-      usernames,
+      mentionInfo.usernames,
+      mentionInfo.mentionsEveryone,
     );
     const nextMentionedUserIds = resolvedUserIds.filter(
       (userId) => userId !== input.senderId,
