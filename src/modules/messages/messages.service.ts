@@ -22,8 +22,27 @@ type UserChatMessageRow = {
   parent_id: string | null;
   content: string | null;
   is_edited: boolean | null;
+  is_deleted: boolean | null;
   created_at: Date | null;
   username: string | null;
+};
+
+type MessagePinRow = {
+  message_id: string | null;
+  pinned_at: Date | null;
+  pinned_by: string | null;
+};
+
+type MessageReadReceiptSummary = {
+  seenByCount: number;
+  seenByUserIds: string[];
+};
+
+type MessageSearchFilters = {
+  keyword?: string;
+  username?: string;
+  date?: string;
+  tag?: string;
 };
 
 @Injectable()
@@ -40,6 +59,7 @@ export class MessagesService {
     parent_id: string | number | bigint | null;
     content: string;
     is_edited: boolean;
+    is_deleted: boolean;
     created_at: Date;
   }): Message {
     return {
@@ -49,6 +69,7 @@ export class MessagesService {
       parent_id: row.parent_id === null ? null : String(row.parent_id),
       content: row.content,
       is_edited: row.is_edited,
+      is_deleted: row.is_deleted,
       created_at: row.created_at,
     };
   }
@@ -61,6 +82,7 @@ export class MessagesService {
       parent_id: row.parent_id === null ? null : String(row.parent_id),
       content: row.content,
       is_edited: row.is_edited,
+      is_deleted: row.is_deleted,
       created_at: row.created_at,
       username: row.username,
     };
@@ -72,6 +94,11 @@ export class MessagesService {
     parentContext: MessageParentContext | null,
     mentionedUserIds: string[],
     replyCount: number,
+    isPinned: boolean,
+    pinnedAt: Date | null,
+    pinnedBy: string | null,
+    tags: string[],
+    readReceiptSummary: MessageReadReceiptSummary,
   ): MessageWithReactions {
     return {
       ...this.mapUserChatMessageRow(row),
@@ -79,6 +106,12 @@ export class MessagesService {
       parent_context: parentContext,
       mentioned_user_ids: mentionedUserIds,
       reply_count: replyCount,
+      is_pinned: isPinned,
+      pinned_at: pinnedAt,
+      pinned_by: pinnedBy,
+      tags,
+      seen_by_count: readReceiptSummary.seenByCount,
+      seen_by_user_ids: readReceiptSummary.seenByUserIds,
     };
   }
 
@@ -141,6 +174,173 @@ export class MessagesService {
     }
 
     return normalized;
+  }
+
+  private extractTags(content: string): string[] {
+    const tagRegex = /(^|\s)#([a-zA-Z0-9_]+)/g;
+    const tags = new Set<string>();
+
+    for (const match of content.matchAll(tagRegex)) {
+      const rawTag = match[2]?.trim().toLowerCase();
+      if (rawTag) {
+        tags.add(rawTag);
+      }
+    }
+
+    return [...tags];
+  }
+
+  private async syncTagsForMessage(messageId: string, content: string): Promise<string[]> {
+    const nextTags = this.extractTags(content);
+    const existingTags = await this.db
+      .selectFrom('chat.message_tags')
+      .select(['tag'])
+      .where('message_id', '=', messageId)
+      .execute();
+
+    const existingTagSet = new Set(existingTags.map((tag) => tag.tag));
+    const nextTagSet = new Set(nextTags);
+    const toInsert = nextTags.filter((tag) => !existingTagSet.has(tag));
+    const toDelete = [...existingTagSet].filter((tag) => !nextTagSet.has(tag));
+
+    await this.db.transaction().execute(async (trx) => {
+      if (toDelete.length > 0) {
+        await trx
+          .deleteFrom('chat.message_tags')
+          .where('message_id', '=', messageId)
+          .where('tag', 'in', toDelete)
+          .execute();
+      }
+
+      if (toInsert.length > 0) {
+        await trx
+          .insertInto('chat.message_tags')
+          .values(
+            toInsert.map((tag) => ({
+              message_id: messageId,
+              tag,
+            })),
+          )
+          .execute();
+      }
+    });
+
+    return nextTags;
+  }
+
+  private async buildTagMap(messageIds: string[]): Promise<Record<string, string[]>> {
+    if (messageIds.length === 0) {
+      return {};
+    }
+
+    const rows = await this.db
+      .selectFrom('chat.message_tags')
+      .select(['message_id', 'tag'])
+      .where('message_id', 'in', messageIds)
+      .orderBy('created_at', 'asc')
+      .execute();
+
+    const tagMap: Record<string, string[]> = {};
+
+    for (const row of rows) {
+      const messageId = String(row.message_id);
+      if (!tagMap[messageId]) {
+        tagMap[messageId] = [];
+      }
+
+      tagMap[messageId].push(row.tag);
+    }
+
+    return tagMap;
+  }
+
+  private async buildPinnedMap(
+    messageIds: string[],
+  ): Promise<Record<string, { pinnedAt: Date; pinnedBy: string }>> {
+    if (messageIds.length === 0) {
+      return {};
+    }
+
+    const rows = await this.db
+      .selectFrom('chat.message_pins')
+      .select(['message_id', 'pinned_at', 'pinned_by'])
+      .where('message_id', 'in', messageIds)
+      .execute();
+
+    const pinnedMap: Record<string, { pinnedAt: Date; pinnedBy: string }> = {};
+
+    for (const row of rows) {
+      if (row.message_id === null) {
+        continue;
+      }
+
+      pinnedMap[String(row.message_id)] = {
+        pinnedAt: row.pinned_at,
+        pinnedBy: row.pinned_by,
+      };
+    }
+
+    return pinnedMap;
+  }
+
+  private async buildReadReceiptMap(
+    messageIds: string[],
+  ): Promise<Record<string, MessageReadReceiptSummary>> {
+    if (messageIds.length === 0) {
+      return {};
+    }
+
+    const rows = await this.db
+      .selectFrom('chat.message_read_receipts as receipt')
+      .innerJoin('auth.users as u', 'u.id', 'receipt.user_id')
+      .select(['receipt.message_id as message_id', 'receipt.user_id as user_id'])
+      .where('receipt.message_id', 'in', messageIds)
+      .execute();
+
+    const receiptMap: Record<string, MessageReadReceiptSummary> = {};
+
+    for (const row of rows) {
+      const messageId = String(row.message_id);
+      if (!receiptMap[messageId]) {
+        receiptMap[messageId] = { seenByCount: 0, seenByUserIds: [] };
+      }
+
+      receiptMap[messageId].seenByCount += 1;
+      receiptMap[messageId].seenByUserIds.push(row.user_id);
+    }
+
+    return receiptMap;
+  }
+
+  private async buildEnrichmentMaps(rows: UserChatMessageRow[]) {
+    const messageIds = rows
+      .map((message) => (message.id === null ? null : String(message.id)))
+      .filter((messageId): messageId is string => Boolean(messageId));
+
+    const parentIds = rows
+      .map((message) => message.parent_id)
+      .filter((parentId): parentId is string => Boolean(parentId));
+
+    const [reactionsMap, parentContextMap, mentionMap, replyCountMap, tagMap, pinnedMap, readReceiptMap] =
+      await Promise.all([
+        this.buildReactionsMap(messageIds),
+        this.buildParentContextMap(parentIds),
+        this.buildMentionMap(messageIds),
+        this.buildReplyCountMap(messageIds.length > 0 ? String(rows[0]?.channel_id ?? '') : ''),
+        this.buildTagMap(messageIds),
+        this.buildPinnedMap(messageIds),
+        this.buildReadReceiptMap(messageIds),
+      ]);
+
+    return {
+      reactionsMap,
+      parentContextMap,
+      mentionMap,
+      replyCountMap,
+      tagMap,
+      pinnedMap,
+      readReceiptMap,
+    };
   }
 
   private extractMentions(content: string): {
@@ -378,6 +578,7 @@ export class MessagesService {
       .selectFrom('chat.messages')
       .select(['id', 'parent_id'])
       .where('channel_id', '=', channelId)
+      .where('is_deleted', '=', false)
       .execute();
 
     const childrenByParent: Record<string, string[]> = {};
@@ -445,15 +646,18 @@ export class MessagesService {
       .map((message) => message.parent_id)
       .filter((parentId): parentId is string => Boolean(parentId));
 
-    const [reactionsMap, parentContextMap, mentionMap, replyCountMap] =
+    const [reactionsMap, parentContextMap, mentionMap, replyCountMap, tagMap, pinnedMap, readReceiptMap] =
       await Promise.all([
-      this.buildReactionsMap(messageIds),
-      this.buildParentContextMap(parentIds),
-      this.buildMentionMap(messageIds),
-      options?.includeReplyCounts && options.channelId
-        ? this.buildReplyCountMap(options.channelId)
-        : Promise.resolve<Record<string, number>>({}),
-    ]);
+        this.buildReactionsMap(messageIds),
+        this.buildParentContextMap(parentIds),
+        this.buildMentionMap(messageIds),
+        options?.includeReplyCounts && options.channelId
+          ? this.buildReplyCountMap(options.channelId)
+          : Promise.resolve<Record<string, number>>({}),
+        this.buildTagMap(messageIds),
+        this.buildPinnedMap(messageIds),
+        this.buildReadReceiptMap(messageIds),
+      ]);
 
     return rows.map((row) => {
       const messageId = row.id === null ? '' : String(row.id);
@@ -472,6 +676,11 @@ export class MessagesService {
         parentContext,
         mentionMap[messageId] ?? [],
         replyCountMap[messageId] ?? 0,
+        Boolean(pinnedMap[messageId]),
+        pinnedMap[messageId]?.pinnedAt ?? null,
+        pinnedMap[messageId]?.pinnedBy ?? null,
+        tagMap[messageId] ?? [],
+        readReceiptMap[messageId] ?? { seenByCount: 0, seenByUserIds: [] },
       );
     });
   }
@@ -596,6 +805,8 @@ export class MessagesService {
       notifyNewMentions: true,
     });
 
+    await this.syncTagsForMessage(String(created.id), content);
+
     if (parentMessageSenderId && parentMessageSenderId !== userId) {
       await this.notificationsService.publishEvent({
         eventType: 'message.reply.created',
@@ -698,6 +909,8 @@ export class MessagesService {
       channelId,
       notifyNewMentions: true,
     });
+
+    await this.syncTagsForMessage(messageId, content);
 
     const updatedWithUser = await this.db
       .selectFrom('chat.user_chat_messages')
@@ -827,7 +1040,10 @@ export class MessagesService {
     this.assertOwner(existing.sender_id, userId);
 
     await this.db
-      .deleteFrom('chat.messages')
+      .updateTable('chat.messages')
+      .set({
+        is_deleted: true,
+      })
       .where('channel_id', '=', channelId)
       .where('id', '=', messageId)
       .executeTakeFirst();
@@ -835,6 +1051,168 @@ export class MessagesService {
     return {
       message: 'Message deleted successfully',
       id: messageId,
+    };
+  }
+
+  async pinMessageForChannel(
+    userId: string,
+    workspaceSlug: string,
+    channelId: string,
+    messageId: string,
+  ): Promise<MessageWithReactions> {
+    const workspace = await this.resolveWorkspaceForMember(workspaceSlug, userId);
+    await this.findChannelById(workspace.id, channelId);
+    await this.findMessageById(channelId, messageId);
+
+    await this.db
+      .insertInto('chat.message_pins')
+      .values({
+        message_id: messageId,
+        pinned_by: userId,
+      })
+      .onConflict((oc) =>
+        oc.column('message_id').doUpdateSet({
+          pinned_by: userId,
+          pinned_at: new Date(),
+        }),
+      )
+      .executeTakeFirst();
+
+    const pinnedMessage = await this.db
+      .selectFrom('chat.user_chat_messages')
+      .selectAll()
+      .where('id', '=', messageId)
+      .executeTakeFirstOrThrow();
+
+    const [enriched] = await this.enrichMessages([pinnedMessage], {
+      includeReplyCounts: true,
+      channelId,
+    });
+
+    return enriched;
+  }
+
+  async unpinMessageForChannel(
+    userId: string,
+    workspaceSlug: string,
+    channelId: string,
+    messageId: string,
+  ): Promise<{ messageId: string }> {
+    const workspace = await this.resolveWorkspaceForMember(workspaceSlug, userId);
+    await this.findChannelById(workspace.id, channelId);
+    await this.findMessageById(channelId, messageId);
+
+    await this.db
+      .deleteFrom('chat.message_pins')
+      .where('message_id', '=', messageId)
+      .executeTakeFirst();
+
+    return { messageId };
+  }
+
+  async getPinnedMessagesForChannel(
+    userId: string,
+    workspaceSlug: string,
+    channelId: string,
+  ): Promise<MessageWithReactions[]> {
+    const workspace = await this.resolveWorkspaceForMember(workspaceSlug, userId);
+    await this.findChannelById(workspace.id, channelId);
+
+    const pinnedMessages = await this.db
+      .selectFrom('chat.user_chat_messages as m')
+      .innerJoin('chat.message_pins as p', 'p.message_id', 'm.id')
+      .selectAll('m')
+      .where('m.channel_id', '=', channelId)
+      .where('m.is_deleted', '=', false)
+      .orderBy('p.pinned_at', 'desc')
+      .execute();
+
+    return this.enrichMessages(pinnedMessages, {
+      includeReplyCounts: true,
+      channelId,
+    });
+  }
+
+  async searchForChannel(
+    userId: string,
+    workspaceSlug: string,
+    channelId: string,
+    filters: MessageSearchFilters,
+  ): Promise<MessageWithReactions[]> {
+    const allMessages = await this.findAllForChannel(userId, workspaceSlug, channelId);
+    const keyword = filters.keyword?.trim().toLowerCase();
+    const username = filters.username?.trim().toLowerCase();
+    const tag = filters.tag?.trim().replace(/^#/, '').toLowerCase();
+    const date = filters.date?.trim();
+
+    return allMessages.filter((message) => {
+      if (message.is_deleted) {
+        return false;
+      }
+
+      const content = (message.content ?? '').toLowerCase()
+      const messageUsername = (message.username ?? '').toLowerCase()
+
+      if (keyword) {
+        const contentMatches = content.includes(keyword);
+        const usernameMatches = messageUsername.includes(keyword);
+        const tagMatches = message.tags.some((messageTag) => messageTag.includes(keyword));
+
+        if (!contentMatches && !usernameMatches && !tagMatches) {
+          return false;
+        }
+      }
+
+      if (username && !messageUsername.includes(username)) {
+        return false;
+      }
+
+      if (tag && !message.tags.includes(tag)) {
+        return false;
+      }
+
+      if (date) {
+        const messageDate = message.created_at
+          ? new Date(message.created_at).toISOString().slice(0, 10)
+          : '';
+        if (messageDate !== new Date(date).toISOString().slice(0, 10)) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }
+
+  async markMessageAsSeenForChannel(
+    userId: string,
+    workspaceSlug: string,
+    channelId: string,
+    messageId: string,
+  ): Promise<{ messageId: string; seenAt: Date }> {
+    const workspace = await this.resolveWorkspaceForMember(workspaceSlug, userId);
+    await this.findChannelById(workspace.id, channelId);
+    await this.findMessageById(channelId, messageId);
+
+    const seenAt = new Date();
+
+    await this.db
+      .insertInto('chat.message_read_receipts')
+      .values({
+        message_id: messageId,
+        user_id: userId,
+        seen_at: seenAt,
+      })
+      .onConflict((oc) =>
+        oc.columns(['message_id', 'user_id']).doUpdateSet({
+          seen_at: seenAt,
+        }),
+      )
+      .executeTakeFirst();
+
+    return {
+      messageId,
+      seenAt,
     };
   }
 

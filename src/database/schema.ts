@@ -5,6 +5,9 @@ import type {
   AuthSession,
   AuthUsers,
   ChatAttachments,
+  ChatMessagePins,
+  ChatMessageReadReceipts,
+  ChatMessageTags,
   ChatMessages,
   ChatReactions,
   DocsPageBlocks,
@@ -22,6 +25,9 @@ export type NewUser = Insertable<AuthUsers>;
 export type UpdateUser = Updateable<AuthUsers>;
 
 export type Message = Selectable<ChatMessages>;
+export type MessagePin = Selectable<ChatMessagePins>;
+export type MessageTag = Selectable<ChatMessageTags>;
+export type MessageReadReceipt = Selectable<ChatMessageReadReceipts>;
 export type UserChatMessages = Selectable<ChatUserChatMessages>;
 
 export type MessageReactionActor = {
@@ -47,4 +53,10 @@ export type MessageWithReactions = UserChatMessages & {
   parent_context: MessageParentContext | null;
   mentioned_user_ids: string[];
   reply_count: number;
+  is_pinned: boolean;
+  pinned_at: Date | null;
+  pinned_by: string | null;
+  tags: string[];
+  seen_by_count: number;
+  seen_by_user_ids: string[];
 };
