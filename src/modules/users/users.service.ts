@@ -96,6 +96,39 @@ export class UsersService {
     if (hasProfileFields) {
       // TODO: Profile fields (display_name, avatar_url, bio, timezone) update
       // requires user_profiles table to be created in the database
+      const profileUpdate: {
+        display_name?: string | null;
+        avatar_url?: string | null;
+        bio?: string | null;
+        timezone?: string | null;
+      } = {};
+
+      if (updateUserDto.display_name !== undefined) {
+        profileUpdate.display_name = updateUserDto.display_name;
+      }
+      if (updateUserDto.avatar_url !== undefined) {
+        profileUpdate.avatar_url = updateUserDto.avatar_url;
+      }
+      if (updateUserDto.bio !== undefined) {
+        profileUpdate.bio = updateUserDto.bio;
+      }
+      if (updateUserDto.timezone !== undefined) {
+        profileUpdate.timezone = updateUserDto.timezone;
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+      await (this.db as any)
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+        .insertInto('auth.user_profiles')
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+        .values({ user_id: id, ...profileUpdate })
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+        .onConflict((oc: any) =>
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+          oc.column('user_id').doUpdateSet(profileUpdate),
+        )
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+        .executeTakeFirst();
     }
 
     const updatedUser = await this.db
