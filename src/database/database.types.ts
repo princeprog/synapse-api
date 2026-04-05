@@ -240,6 +240,7 @@ export interface WorkspacesWorkspaces {
 export interface DB {
   'auth.activity_log': AuthActivityLog;
   'auth.session': AuthSession;
+  'auth.user_profiles': AuthUserProfiles;
   'auth.users': AuthUsers;
   'chat.attachments': ChatAttachments;
   'chat.channel_read_markers': ChatChannelReadMarkers;
