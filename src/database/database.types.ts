@@ -262,6 +262,9 @@ export interface DB {
   "chat.attachments": ChatAttachments;
   "chat.channel_read_markers": ChatChannelReadMarkers;
   "chat.mentions": ChatMentions;
+  "chat.message_pins": ChatMessagePins;
+  "chat.message_read_receipts": ChatMessageReadReceipts;
+  "chat.message_tags": ChatMessageTags;
   "chat.messages": ChatMessages;
   "chat.reactions": ChatReactions;
   "chat.user_chat_messages": ChatUserChatMessages;
