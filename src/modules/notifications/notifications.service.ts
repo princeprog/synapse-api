@@ -9,7 +9,9 @@ export type NotificationEventType =
   | 'workspace.invite.created'
   | 'workspace.invite.revoked'
   | 'workspace.invite.accepted'
-  | 'workspace.invite.declined';
+  | 'workspace.invite.declined'
+  | 'message.mention.created'
+  | 'message.reply.created';
 
 type PublishNotificationEventInput = {
   eventType: NotificationEventType;
@@ -86,13 +88,10 @@ export class NotificationsService {
       .selectFrom('notifications.deliveries as d')
       .innerJoin('notifications.events as e', 'e.id', 'd.event_id')
       .leftJoin('workspaces.workspaces as w', 'w.id', 'e.workspace_id')
-      .innerJoin(
-        'workspaces.workspace_invitations as wi',
-        'wi.workspace_id',
-        'w.id',
-      )
+      .leftJoin('workspaces.workspace_invitations as wi', 'wi.id', 'e.entity_id')
       .select([
         'd.id as delivery_id',
+        'd.status as delivery_status',
         'e.id as event_id',
         'e.event_type',
         'e.entity_id',
@@ -104,7 +103,6 @@ export class NotificationsService {
         'wi.status as invitation_status',
       ])
       .where('d.recipient_user_id', '=', userId)
-      .where('wi.status', 'in', ['accepted', 'pending'])
       .orderBy('e.created_at', 'desc')
       .limit(limit)
       .execute();
@@ -126,7 +124,7 @@ export class NotificationsService {
             }
           : null,
         invitation,
-        status: row.invitation_status,
+        status: row.invitation_status ?? row.delivery_status,
         message: this.buildMessage(
           row.event_type,
           row.workspace_name,
@@ -190,6 +188,10 @@ export class NotificationsService {
         return `An invitation was declined in ${workspaceLabel}.`;
       case 'workspace.invite.revoked':
         return `An invitation was revoked in ${workspaceLabel}.`;
+      case 'message.mention.created':
+        return `You were mentioned in ${workspaceLabel}.`;
+      case 'message.reply.created':
+        return `Someone replied to your message in ${workspaceLabel}.`;
       default:
         return 'You have a new notification.';
     }

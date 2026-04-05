@@ -45,4 +45,6 @@ export type MessageParentContext = {
 export type MessageWithReactions = UserChatMessages & {
   reactions: MessageReactionGroup[];
   parent_context: MessageParentContext | null;
+  mentioned_user_ids: string[];
+  reply_count: number;
 };

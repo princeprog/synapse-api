@@ -3,18 +3,13 @@
  * Please do not edit it manually.
  */
 
-import type { ColumnType } from 'kysely';
+import type { ColumnType } from "kysely";
 
-export type Generated<T> =
-  T extends ColumnType<infer S, infer I, infer U>
-    ? ColumnType<S, I | undefined, U>
-    : ColumnType<T, T | undefined, T>;
+export type Generated<T> = T extends ColumnType<infer S, infer I, infer U>
+  ? ColumnType<S, I | undefined, U>
+  : ColumnType<T, T | undefined, T>;
 
-export type Int8 = ColumnType<
-  string,
-  bigint | number | string,
-  bigint | number | string
->;
+export type Int8 = ColumnType<string, bigint | number | string, bigint | number | string>;
 
 export type Json = JsonValue;
 
@@ -72,6 +67,20 @@ export interface ChatAttachments {
   id: Generated<Int8>;
   message_id: Int8;
   mime_type: string;
+}
+
+export interface ChatChannelReadMarkers {
+  channel_id: Int8;
+  last_read_at: Generated<Timestamp>;
+  last_read_message_id: Int8 | null;
+  user_id: string;
+}
+
+export interface ChatMentions {
+  created_at: Generated<Timestamp>;
+  id: Generated<Int8>;
+  mentioned_user_id: string;
+  message_id: Int8;
 }
 
 export interface ChatMessages {
@@ -220,9 +229,23 @@ export interface DB {
   'notifications.deliveries': NotificationsDeliveries;
   'notifications.events': NotificationsEvents;
   'tasks.tasks': TasksTasks;
+  "auth.activity_log": AuthActivityLog;
+  "auth.session": AuthSession;
+  "auth.users": AuthUsers;
+  "chat.attachments": ChatAttachments;
+  "chat.channel_read_markers": ChatChannelReadMarkers;
+  "chat.mentions": ChatMentions;
+  "chat.messages": ChatMessages;
+  "chat.reactions": ChatReactions;
+  "chat.user_chat_messages": ChatUserChatMessages;
+  "docs.page_blocks": DocsPageBlocks;
+  "docs.pages": DocsPages;
+  "notifications.deliveries": NotificationsDeliveries;
+  "notifications.events": NotificationsEvents;
+  "tasks.tasks": TasksTasks;
   users: Users;
-  'workspaces.channels': WorkspacesChannels;
-  'workspaces.workspace_invitations': WorkspacesWorkspaceInvitations;
-  'workspaces.workspace_members': WorkspacesWorkspaceMembers;
-  'workspaces.workspaces': WorkspacesWorkspaces;
+  "workspaces.channels": WorkspacesChannels;
+  "workspaces.workspace_invitations": WorkspacesWorkspaceInvitations;
+  "workspaces.workspace_members": WorkspacesWorkspaceMembers;
+  "workspaces.workspaces": WorkspacesWorkspaces;
 }
