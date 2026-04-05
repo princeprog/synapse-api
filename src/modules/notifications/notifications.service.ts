@@ -9,7 +9,9 @@ export type NotificationEventType =
   | 'workspace.invite.created'
   | 'workspace.invite.revoked'
   | 'workspace.invite.accepted'
-  | 'workspace.invite.declined';
+  | 'workspace.invite.declined'
+  | 'message.mention.created'
+  | 'message.reply.created';
 
 type PublishNotificationEventInput = {
   eventType: NotificationEventType;
@@ -18,7 +20,7 @@ type PublishNotificationEventInput = {
   entityType: string;
   entityId?: string;
   payload: Record<string, JsonValue>;
-  recipientUserIds: string[];
+  recipientUserId: string | null;
 };
 
 @Injectable()
@@ -29,10 +31,8 @@ export class NotificationsService {
   ) {}
 
   async publishEvent(input: PublishNotificationEventInput) {
-    const recipients = [...new Set(input.recipientUserIds.filter(Boolean))];
-
-    if (recipients.length === 0) {
-      return null;
+    if (!input.recipientUserId) {
+      return;
     }
 
     const event = await this.db
@@ -59,24 +59,26 @@ export class NotificationsService {
 
     await this.db
       .insertInto('notifications.deliveries')
-      .values(
-        recipients.map((recipientUserId) => ({
-          event_id: event.id,
-          recipient_user_id: recipientUserId,
-        })),
-      )
+      .values({
+        event_id: event.id,
+        recipient_user_id: input.recipientUserId,
+      })
       .execute();
 
-    this.notificationsGateway.emitToUsers(recipients, 'notification.created', {
-      eventId: event.id,
-      eventType: event.event_type,
-      workspaceId: event.workspace_id,
-      actorUserId: event.actor_user_id,
-      entityType: event.entity_type,
-      entityId: event.entity_id,
-      payload: event.payload,
-      createdAt: event.created_at,
-    });
+    this.notificationsGateway.emitToUsers(
+      [input.recipientUserId],
+      'notification.created',
+      {
+        eventId: event.id,
+        eventType: event.event_type,
+        workspaceId: event.workspace_id,
+        actorUserId: event.actor_user_id,
+        entityType: event.entity_type,
+        entityId: event.entity_id,
+        payload: event.payload,
+        createdAt: event.created_at,
+      },
+    );
 
     return event;
   }
@@ -86,8 +88,10 @@ export class NotificationsService {
       .selectFrom('notifications.deliveries as d')
       .innerJoin('notifications.events as e', 'e.id', 'd.event_id')
       .leftJoin('workspaces.workspaces as w', 'w.id', 'e.workspace_id')
+      .leftJoin('workspaces.workspace_invitations as wi', 'wi.id', 'e.entity_id')
       .select([
         'd.id as delivery_id',
+        'd.status as delivery_status',
         'e.id as event_id',
         'e.event_type',
         'e.entity_id',
@@ -96,6 +100,7 @@ export class NotificationsService {
         'w.id as workspace_id',
         'w.name as workspace_name',
         'w.slug as workspace_slug',
+        'wi.status as invitation_status',
       ])
       .where('d.recipient_user_id', '=', userId)
       .orderBy('e.created_at', 'desc')
@@ -119,7 +124,12 @@ export class NotificationsService {
             }
           : null,
         invitation,
-        message: this.buildMessage(row.event_type, row.workspace_name),
+        status: row.invitation_status ?? row.delivery_status,
+        message: this.buildMessage(
+          row.event_type,
+          row.workspace_name,
+          row.invitation_status,
+        ),
       };
     });
   }
@@ -159,18 +169,29 @@ export class NotificationsService {
     };
   }
 
-  private buildMessage(eventType: string, workspaceName: string | null) {
+  private buildMessage(
+    eventType: string,
+    workspaceName: string | null,
+    invitationStatus: string | null,
+  ) {
     const workspaceLabel = workspaceName ?? 'a workspace';
 
     switch (eventType) {
       case 'workspace.invite.created':
-        return `You have a workspace invitation to ${workspaceLabel}.`;
+        if (invitationStatus === 'pending') {
+          return `You have been invited to join ${workspaceLabel}.`;
+        }
+        return `You have accepted an invitation to ${workspaceLabel}.`;
       case 'workspace.invite.accepted':
         return `An invitation was accepted in ${workspaceLabel}.`;
       case 'workspace.invite.declined':
         return `An invitation was declined in ${workspaceLabel}.`;
       case 'workspace.invite.revoked':
         return `An invitation was revoked in ${workspaceLabel}.`;
+      case 'message.mention.created':
+        return `You were mentioned in ${workspaceLabel}.`;
+      case 'message.reply.created':
+        return `Someone replied to your message in ${workspaceLabel}.`;
       default:
         return 'You have a new notification.';
     }

@@ -362,7 +362,7 @@ export class WorkspacesService {
           status: 'pending',
           expiresAt: invitation.expires_at.toISOString(),
         },
-        recipientUserIds: recipients,
+        recipientUserId: invitedUser?.id ? invitedUser.id : null,
       });
     }
 
@@ -382,14 +382,7 @@ export class WorkspacesService {
 
     return this.db
       .selectFrom('workspaces.workspace_invitations')
-      .select([
-        'id',
-        'email',
-        'role',
-        'status',
-        'expires_at',
-        'accepted_at',
-      ])
+      .select(['id', 'email', 'role', 'status', 'expires_at', 'accepted_at'])
       .where('workspace_id', '=', workspace.id)
       .where('status', '=', 'pending')
       .orderBy('expires_at', 'asc')
@@ -449,7 +442,9 @@ export class WorkspacesService {
         role: invitation.role,
         status: 'revoked',
       },
-      recipientUserIds: recipients,
+      recipientUserId: invitation.invited_user_id
+        ? invitation.invited_user_id
+        : null,
     });
 
     return { message: 'Invitation revoked successfully' };
@@ -597,7 +592,7 @@ export class WorkspacesService {
         role: this.normalizeMemberRole(invitation.role),
         status: 'accepted',
       },
-      recipientUserIds: adminIds,
+      recipientUserId: adminIds.length > 0 ? adminIds[0] : null,
     });
 
     return {
@@ -669,7 +664,7 @@ export class WorkspacesService {
         role: invitation.role,
         status: 'declined',
       },
-      recipientUserIds: adminIds,
+      recipientUserId: adminIds.length > 0 ? adminIds[0] : null,
     });
 
     return { message: 'Invitation declined successfully' };

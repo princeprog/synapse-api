@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import type { Kysely } from 'kysely';
+import { sql, type Kysely } from 'kysely';
 
 import type { DB } from '../../database/database.types';
 import { DATABASE_TOKEN } from '../../database/database.module';
@@ -22,6 +22,8 @@ export class ChannelsService {
     description: string | null;
     created_by: string;
     created_at: Date;
+    unread_count?: string | number | bigint;
+    mention_unread_count?: string | number | bigint;
   }) {
     return {
       id: String(row.id),
@@ -30,6 +32,8 @@ export class ChannelsService {
       description: row.description,
       createdBy: row.created_by,
       createdAt: row.created_at,
+      unreadCount: Number(row.unread_count ?? 0),
+      mentionUnreadCount: Number(row.mention_unread_count ?? 0),
     };
   }
 
@@ -104,10 +108,38 @@ export class ChannelsService {
     );
 
     const channels = await this.db
-      .selectFrom('workspaces.channels')
-      .selectAll()
-      .where('workspace_id', '=', workspace.id)
-      .orderBy('created_at', 'asc')
+      .selectFrom('workspaces.channels as c')
+      .leftJoin('chat.channel_read_markers as crm', (join) =>
+        join
+          .onRef('crm.channel_id', '=', 'c.id')
+          .on('crm.user_id', '=', userId),
+      )
+      .select([
+        'c.id',
+        'c.workspace_id',
+        'c.name',
+        'c.description',
+        'c.created_by',
+        'c.created_at',
+        sql<number>`coalesce((
+          select count(*)
+          from chat.messages as m
+          where m.channel_id = c.id
+            and m.sender_id <> ${userId}
+            and m.id > coalesce(crm.last_read_message_id, 0)
+        ), 0)`.as('unread_count'),
+        sql<number>`coalesce((
+          select count(*)
+          from chat.mentions as mt
+          inner join chat.messages as m on m.id = mt.message_id
+          where m.channel_id = c.id
+            and mt.mentioned_user_id = ${userId}
+            and m.sender_id <> ${userId}
+            and m.id > coalesce(crm.last_read_message_id, 0)
+        ), 0)`.as('mention_unread_count'),
+      ])
+      .where('c.workspace_id', '=', workspace.id)
+      .orderBy('c.created_at', 'asc')
       .execute();
 
     return channels.map((channel) => this.mapChannelRow(channel));
@@ -125,6 +157,54 @@ export class ChannelsService {
     const channel = await this.findChannelById(workspace.id, channelId);
 
     return this.mapChannelRow(channel);
+  }
+
+  async markChannelAsRead(
+    userId: string,
+    workspaceSlug: string,
+    channelId: string,
+  ) {
+    const workspace = await this.resolveWorkspaceForMember(
+      workspaceSlug,
+      userId,
+    );
+    const channel = await this.findChannelById(workspace.id, channelId);
+
+    const latestMessage = await this.db
+      .selectFrom('chat.messages')
+      .select(['id'])
+      .where('channel_id', '=', channel.id)
+      .orderBy('id', 'desc')
+      .executeTakeFirst();
+
+    const now = new Date();
+    const marker = await this.db
+      .insertInto('chat.channel_read_markers')
+      .values({
+        user_id: userId,
+        channel_id: channel.id,
+        last_read_message_id: latestMessage?.id ?? null,
+        last_read_at: now,
+      })
+      .onConflict((oc) =>
+        oc.columns(['user_id', 'channel_id']).doUpdateSet({
+          last_read_message_id: latestMessage?.id ?? null,
+          last_read_at: now,
+        }),
+      )
+      .returningAll()
+      .executeTakeFirstOrThrow();
+
+    return {
+      channelId: String(channel.id),
+      lastReadMessageId:
+        marker.last_read_message_id === null
+          ? null
+          : String(marker.last_read_message_id),
+      lastReadAt: marker.last_read_at,
+      unreadCount: 0,
+      mentionUnreadCount: 0,
+    };
   }
 
   async update(

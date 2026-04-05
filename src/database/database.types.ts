@@ -74,14 +74,49 @@ export interface ChatAttachments {
   mime_type: string;
 }
 
+export interface ChatChannelReadMarkers {
+  channel_id: Int8;
+  last_read_at: Generated<Timestamp>;
+  last_read_message_id: Int8 | null;
+  user_id: string;
+}
+
+export interface ChatMentions {
+  created_at: Generated<Timestamp>;
+  id: Generated<Int8>;
+  mentioned_user_id: string;
+  message_id: Int8;
+}
+
+export interface ChatMessagePins {
+  id: Generated<Int8>;
+  message_id: Int8;
+  pinned_at: Generated<Timestamp>;
+  pinned_by: string;
+}
+
+export interface ChatMessageReadReceipts {
+  message_id: Int8;
+  seen_at: Generated<Timestamp>;
+  user_id: string;
+}
+
 export interface ChatMessages {
   channel_id: Int8;
   content: string;
   created_at: Generated<Timestamp>;
   id: Generated<Int8>;
+  is_deleted: Generated<boolean>;
   is_edited: Generated<boolean>;
   parent_id: Int8 | null;
   sender_id: string;
+}
+
+export interface ChatMessageTags {
+  created_at: Generated<Timestamp>;
+  id: Generated<Int8>;
+  message_id: Int8;
+  tag: string;
 }
 
 export interface ChatReactions {
@@ -90,6 +125,18 @@ export interface ChatReactions {
   id: Generated<Int8>;
   message_id: Int8;
   user_id: string;
+}
+
+export interface ChatUserChatMessages {
+  channel_id: Int8 | null;
+  content: string | null;
+  created_at: Timestamp | null;
+  id: Int8 | null;
+  is_deleted: boolean | null;
+  is_edited: boolean | null;
+  parent_id: Int8 | null;
+  sender_id: string | null;
+  username: string | null;
 }
 
 export interface DocsPageBlocks {
@@ -208,6 +255,23 @@ export interface DB {
   'notifications.deliveries': NotificationsDeliveries;
   'notifications.events': NotificationsEvents;
   'tasks.tasks': TasksTasks;
+  "auth.activity_log": AuthActivityLog;
+  "auth.session": AuthSession;
+  "auth.users": AuthUsers;
+  "chat.attachments": ChatAttachments;
+  "chat.channel_read_markers": ChatChannelReadMarkers;
+  "chat.mentions": ChatMentions;
+  "chat.message_pins": ChatMessagePins;
+  "chat.message_read_receipts": ChatMessageReadReceipts;
+  "chat.message_tags": ChatMessageTags;
+  "chat.messages": ChatMessages;
+  "chat.reactions": ChatReactions;
+  "chat.user_chat_messages": ChatUserChatMessages;
+  "docs.page_blocks": DocsPageBlocks;
+  "docs.pages": DocsPages;
+  "notifications.deliveries": NotificationsDeliveries;
+  "notifications.events": NotificationsEvents;
+  "tasks.tasks": TasksTasks;
   users: Users;
   'workspaces.channels': WorkspacesChannels;
   'workspaces.workspace_invitations': WorkspacesWorkspaceInvitations;
