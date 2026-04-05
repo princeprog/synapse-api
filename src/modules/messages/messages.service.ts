@@ -13,6 +13,7 @@ import {
   UserChatMessages,
 } from 'src/database/schema';
 import { NotFoundException, ForbiddenException } from '@nestjs/common';
+import { NotificationsService } from '../notifications/notifications.service';
 
 type UserChatMessageRow = {
   id: string | null;
@@ -27,7 +28,10 @@ type UserChatMessageRow = {
 
 @Injectable()
 export class MessagesService {
-  constructor(@Inject(DATABASE_TOKEN) private readonly db: Kysely<DB>) {}
+  constructor(
+    @Inject(DATABASE_TOKEN) private readonly db: Kysely<DB>,
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   private mapMessageRow(row: {
     id: string | number | bigint;
@@ -66,11 +70,15 @@ export class MessagesService {
     row: UserChatMessageRow,
     reactions: MessageReactionGroup[],
     parentContext: MessageParentContext | null,
+    mentionedUserIds: string[],
+    replyCount: number,
   ): MessageWithReactions {
     return {
       ...this.mapUserChatMessageRow(row),
       reactions,
       parent_context: parentContext,
+      mentioned_user_ids: mentionedUserIds,
+      reply_count: replyCount,
     };
   }
 
@@ -135,6 +143,128 @@ export class MessagesService {
     return normalized;
   }
 
+  private extractMentionUsernames(content: string): string[] {
+    const mentionRegex = /(^|\s)@([a-zA-Z0-9_]+)/g;
+    const usernames = new Set<string>();
+
+    for (const match of content.matchAll(mentionRegex)) {
+      const username = match[2]?.trim().toLowerCase();
+      if (username) {
+        usernames.add(username);
+      }
+    }
+
+    return [...usernames];
+  }
+
+  private async resolveMentionedUserIds(
+    workspaceId: string,
+    usernames: string[],
+  ): Promise<string[]> {
+    if (usernames.length === 0) {
+      return [];
+    }
+
+    const members = await this.db
+      .selectFrom('workspaces.workspace_members as wm')
+      .innerJoin('auth.users as u', 'u.id', 'wm.member_id')
+      .select(['u.id as user_id', 'u.username as username'])
+      .where('wm.workspace_id', '=', workspaceId)
+      .execute();
+
+    const memberByUsername = new Map<string, string>();
+    for (const member of members) {
+      memberByUsername.set(member.username.toLowerCase(), member.user_id);
+    }
+
+    const mentionedUserIds: string[] = [];
+    for (const username of usernames) {
+      const userId = memberByUsername.get(username);
+      if (userId) {
+        mentionedUserIds.push(userId);
+      }
+    }
+
+    return [...new Set(mentionedUserIds)];
+  }
+
+  private async syncMentionsForMessage(input: {
+    messageId: string;
+    content: string;
+    senderId: string;
+    workspaceId: string;
+    workspaceSlug: string;
+    channelId: string;
+    notifyNewMentions: boolean;
+  }): Promise<string[]> {
+    const usernames = this.extractMentionUsernames(input.content);
+    const resolvedUserIds = await this.resolveMentionedUserIds(
+      input.workspaceId,
+      usernames,
+    );
+    const nextMentionedUserIds = resolvedUserIds.filter(
+      (userId) => userId !== input.senderId,
+    );
+
+    const existingMentions = await this.db
+      .selectFrom('chat.mentions')
+      .select(['mentioned_user_id'])
+      .where('message_id', '=', input.messageId)
+      .execute();
+
+    const existingUserIds = new Set(
+      existingMentions.map((mention) => mention.mentioned_user_id),
+    );
+    const nextUserIds = new Set(nextMentionedUserIds);
+
+    const toInsert = nextMentionedUserIds.filter(
+      (userId) => !existingUserIds.has(userId),
+    );
+    const toDelete = [...existingUserIds].filter((userId) => !nextUserIds.has(userId));
+
+    await this.db.transaction().execute(async (trx) => {
+      if (toDelete.length > 0) {
+        await trx
+          .deleteFrom('chat.mentions')
+          .where('message_id', '=', input.messageId)
+          .where('mentioned_user_id', 'in', toDelete)
+          .execute();
+      }
+
+      if (toInsert.length > 0) {
+        await trx
+          .insertInto('chat.mentions')
+          .values(
+            toInsert.map((userId) => ({
+              message_id: input.messageId,
+              mentioned_user_id: userId,
+            })),
+          )
+          .execute();
+      }
+    });
+
+    if (input.notifyNewMentions) {
+      for (const mentionedUserId of toInsert) {
+        await this.notificationsService.publishEvent({
+          eventType: 'message.mention.created',
+          workspaceId: input.workspaceId,
+          actorUserId: input.senderId,
+          entityType: 'message',
+          recipientUserId: mentionedUserId,
+          payload: {
+            workspaceSlug: input.workspaceSlug,
+            channelId: input.channelId,
+            messageId: input.messageId,
+            preview: input.content.slice(0, 180),
+          },
+        });
+      }
+    }
+
+    return nextMentionedUserIds;
+  }
+
   private async buildReactionsMap(
     messageIds: string[],
   ): Promise<Record<string, MessageReactionGroup[]>> {
@@ -193,6 +323,88 @@ export class MessagesService {
     return reactionsMap;
   }
 
+  private async buildMentionMap(
+    messageIds: string[],
+  ): Promise<Record<string, string[]>> {
+    if (messageIds.length === 0) {
+      return {};
+    }
+
+    const rows = await this.db
+      .selectFrom('chat.mentions')
+      .select(['message_id', 'mentioned_user_id'])
+      .where('message_id', 'in', messageIds)
+      .execute();
+
+    const mentionMap: Record<string, string[]> = {};
+
+    for (const row of rows) {
+      const messageId = String(row.message_id);
+      if (!mentionMap[messageId]) {
+        mentionMap[messageId] = [];
+      }
+
+      mentionMap[messageId].push(row.mentioned_user_id);
+    }
+
+    return mentionMap;
+  }
+
+  private async buildReplyCountMap(
+    channelId: string,
+  ): Promise<Record<string, number>> {
+    const rows = await this.db
+      .selectFrom('chat.messages')
+      .select(['id', 'parent_id'])
+      .where('channel_id', '=', channelId)
+      .execute();
+
+    const childrenByParent: Record<string, string[]> = {};
+    const messageIds: string[] = [];
+
+    for (const row of rows) {
+      const messageId = String(row.id);
+      messageIds.push(messageId);
+
+      if (row.parent_id === null) {
+        continue;
+      }
+
+      const parentId = String(row.parent_id);
+      if (!childrenByParent[parentId]) {
+        childrenByParent[parentId] = [];
+      }
+
+      childrenByParent[parentId].push(messageId);
+    }
+
+    const memo = new Map<string, number>();
+
+    const countDescendants = (messageId: string): number => {
+      if (memo.has(messageId)) {
+        return memo.get(messageId) ?? 0;
+      }
+
+      const children = childrenByParent[messageId] ?? [];
+      let total = 0;
+
+      for (const childId of children) {
+        total += 1;
+        total += countDescendants(childId);
+      }
+
+      memo.set(messageId, total);
+      return total;
+    };
+
+    const replyCountMap: Record<string, number> = {};
+    for (const messageId of messageIds) {
+      replyCountMap[messageId] = countDescendants(messageId);
+    }
+
+    return replyCountMap;
+  }
+
   private async getReactionsForMessage(
     messageId: string,
   ): Promise<MessageReactionGroup[]> {
@@ -200,7 +412,10 @@ export class MessagesService {
     return map[messageId] ?? [];
   }
 
-  private async enrichMessages(rows: UserChatMessageRow[]) {
+  private async enrichMessages(
+    rows: UserChatMessageRow[],
+    options?: { includeReplyCounts?: boolean; channelId?: string },
+  ) {
     const messageIds = rows
       .map((message) => (message.id === null ? null : String(message.id)))
       .filter((messageId): messageId is string => Boolean(messageId));
@@ -209,9 +424,14 @@ export class MessagesService {
       .map((message) => message.parent_id)
       .filter((parentId): parentId is string => Boolean(parentId));
 
-    const [reactionsMap, parentContextMap] = await Promise.all([
+    const [reactionsMap, parentContextMap, mentionMap, replyCountMap] =
+      await Promise.all([
       this.buildReactionsMap(messageIds),
       this.buildParentContextMap(parentIds),
+      this.buildMentionMap(messageIds),
+      options?.includeReplyCounts && options.channelId
+        ? this.buildReplyCountMap(options.channelId)
+        : Promise.resolve<Record<string, number>>({}),
     ]);
 
     return rows.map((row) => {
@@ -229,6 +449,8 @@ export class MessagesService {
         row,
         reactionsMap[messageId] ?? [],
         parentContext,
+        mentionMap[messageId] ?? [],
+        replyCountMap[messageId] ?? 0,
       );
     });
   }
@@ -311,13 +533,18 @@ export class MessagesService {
     }
 
     let parentId: string | null = null;
+    let parentMessageSenderId: string | null = null;
     if (dto.parentId !== undefined) {
       const normalizedParentId = dto.parentId.trim();
       if (!normalizedParentId) {
         throw new BadRequestException('parentId cannot be empty');
       }
 
-      await this.findMessageById(channelId, normalizedParentId);
+      const parentMessage = await this.findMessageById(
+        channelId,
+        normalizedParentId,
+      );
+      parentMessageSenderId = parentMessage.sender_id;
       parentId = normalizedParentId;
     }
 
@@ -338,7 +565,37 @@ export class MessagesService {
       .where('id', '=', created.id)
       .executeTakeFirstOrThrow();
 
-    const [enriched] = await this.enrichMessages([message]);
+    await this.syncMentionsForMessage({
+      messageId: String(created.id),
+      content,
+      senderId: userId,
+      workspaceId: workspace.id,
+      workspaceSlug,
+      channelId,
+      notifyNewMentions: true,
+    });
+
+    if (parentMessageSenderId && parentMessageSenderId !== userId) {
+      await this.notificationsService.publishEvent({
+        eventType: 'message.reply.created',
+        workspaceId: workspace.id,
+        actorUserId: userId,
+        entityType: 'message',
+        recipientUserId: parentMessageSenderId,
+        payload: {
+          workspaceSlug,
+          channelId,
+          messageId: String(created.id),
+          parentMessageId: parentId,
+          preview: content.slice(0, 180),
+        },
+      });
+    }
+
+    const [enriched] = await this.enrichMessages([message], {
+      includeReplyCounts: true,
+      channelId,
+    });
     return enriched;
   }
 
@@ -360,7 +617,10 @@ export class MessagesService {
       .orderBy('created_at', 'asc')
       .execute();
 
-    return this.enrichMessages(messages);
+    return this.enrichMessages(messages, {
+      includeReplyCounts: true,
+      channelId,
+    });
   }
 
   async updateForChannel(
@@ -386,7 +646,10 @@ export class MessagesService {
         .where('id', '=', existing.id)
         .executeTakeFirstOrThrow();
 
-      const [enriched] = await this.enrichMessages([existingWithUser]);
+      const [enriched] = await this.enrichMessages([existingWithUser], {
+        includeReplyCounts: true,
+        channelId,
+      });
       return enriched;
     }
 
@@ -405,13 +668,26 @@ export class MessagesService {
       .where('id', '=', messageId)
       .executeTakeFirstOrThrow();
 
+    await this.syncMentionsForMessage({
+      messageId,
+      content,
+      senderId: userId,
+      workspaceId: workspace.id,
+      workspaceSlug,
+      channelId,
+      notifyNewMentions: true,
+    });
+
     const updatedWithUser = await this.db
       .selectFrom('chat.user_chat_messages')
       .selectAll()
       .where('id', '=', messageId)
       .executeTakeFirstOrThrow();
 
-    const [enriched] = await this.enrichMessages([updatedWithUser]);
+    const [enriched] = await this.enrichMessages([updatedWithUser], {
+      includeReplyCounts: true,
+      channelId,
+    });
     return enriched;
   }
 
@@ -435,7 +711,10 @@ export class MessagesService {
 
     return {
       messageId,
-      replies: await this.enrichMessages(replies),
+      replies: await this.enrichMessages(replies, {
+        includeReplyCounts: true,
+        channelId,
+      }),
     };
   }
 
@@ -504,7 +783,10 @@ export class MessagesService {
 
     return {
       rootMessageId,
-      thread: await this.enrichMessages(threadRows),
+      thread: await this.enrichMessages(threadRows, {
+        includeReplyCounts: true,
+        channelId,
+      }),
     };
   }
 

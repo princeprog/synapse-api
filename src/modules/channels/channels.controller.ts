@@ -77,6 +77,19 @@ export class ChannelsController {
     );
   }
 
+  @Patch(':channelId/read')
+  markAsRead(
+    @Request() req: AuthenticatedRequest,
+    @Param('workspaceSlug') workspaceSlug: string,
+    @Param('channelId') channelId: string,
+  ) {
+    return this.channelsService.markChannelAsRead(
+      req.user.userId,
+      workspaceSlug,
+      channelId,
+    );
+  }
+
   @Delete(':channelId')
   remove(
     @Request() req: AuthenticatedRequest,
