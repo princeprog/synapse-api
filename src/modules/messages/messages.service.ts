@@ -376,6 +376,7 @@ export class MessagesService {
   private extractMentionUsernames(content: string): string[] {
     const mentionRegex = /(^|\s)@([a-zA-Z0-9_]+)/g;
     const usernames = new Set<string>();
+    let mentionsEveryone = false;
 
     for (const match of content.matchAll(mentionRegex)) {
       const username = match[2]?.trim().toLowerCase();
@@ -403,7 +404,7 @@ export class MessagesService {
   ): Promise<string[]> {
     if (usernames.length === 0 && !mentionsEveryone) {
   ): Promise<string[]> {
-    if (usernames.length === 0) {
+    if (usernames.length === 0 && !mentionsEveryone) {
       return [];
     }
 
@@ -454,7 +455,8 @@ export class MessagesService {
     const usernames = this.extractMentionUsernames(input.content);
     const resolvedUserIds = await this.resolveMentionedUserIds(
       input.workspaceId,
-      usernames,
+      mentionInfo.usernames,
+      mentionInfo.mentionsEveryone,
     );
     const nextMentionedUserIds = resolvedUserIds.filter(
       (userId) => userId !== input.senderId,
