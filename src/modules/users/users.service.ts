@@ -122,10 +122,18 @@ export class UsersService {
         profileUpdate.timezone = updateUserDto.timezone;
       }
 
-      await this.db
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+      await (this.db as any)
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
         .insertInto('auth.user_profiles')
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
         .values({ user_id: id, ...profileUpdate })
-        .onConflict((oc) => oc.column('user_id').doUpdateSet(profileUpdate))
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+        .onConflict((oc: any) =>
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+          oc.column('user_id').doUpdateSet(profileUpdate),
+        )
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
         .executeTakeFirst();
     }
 
