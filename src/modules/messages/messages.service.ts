@@ -373,6 +373,9 @@ export class MessagesService {
     const mentionRegex = /(^|\s)@([a-zA-Z0-9_]+)/g;
     const usernames = new Set<string>();
     let mentionsEveryone = false;
+  private extractMentionUsernames(content: string): string[] {
+    const mentionRegex = /(^|\s)@([a-zA-Z0-9_]+)/g;
+    const usernames = new Set<string>();
 
     for (const match of content.matchAll(mentionRegex)) {
       const username = match[2]?.trim().toLowerCase();
@@ -390,6 +393,7 @@ export class MessagesService {
       usernames: [...usernames],
       mentionsEveryone,
     };
+    return [...usernames];
   }
 
   private async resolveMentionedUserIds(
@@ -398,6 +402,8 @@ export class MessagesService {
     mentionsEveryone: boolean,
   ): Promise<string[]> {
     if (usernames.length === 0 && !mentionsEveryone) {
+  ): Promise<string[]> {
+    if (usernames.length === 0) {
       return [];
     }
 
@@ -445,6 +451,10 @@ export class MessagesService {
       input.workspaceId,
       mentionInfo.usernames,
       mentionInfo.mentionsEveryone,
+    const usernames = this.extractMentionUsernames(input.content);
+    const resolvedUserIds = await this.resolveMentionedUserIds(
+      input.workspaceId,
+      usernames,
     );
     const nextMentionedUserIds = resolvedUserIds.filter(
       (userId) => userId !== input.senderId,
@@ -683,8 +693,14 @@ export class MessagesService {
         this.buildReadReceiptMap(messageIds),
       ]);
     const [reactionsMap, parentContextMap] = await Promise.all([
+    const [reactionsMap, parentContextMap, mentionMap, replyCountMap] =
+      await Promise.all([
       this.buildReactionsMap(messageIds),
       this.buildParentContextMap(parentIds),
+      this.buildMentionMap(messageIds),
+      options?.includeReplyCounts && options.channelId
+        ? this.buildReplyCountMap(options.channelId)
+        : Promise.resolve<Record<string, number>>({}),
     ]);
 
     return rows.map((row) => {

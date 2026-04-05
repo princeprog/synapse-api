@@ -127,7 +127,6 @@ export class NotificationsService {
       ])
       ]) 
       .where('d.recipient_user_id', '=', userId)
-      .where('wi.status', 'in', ['accepted', 'pending'])
       .orderBy('e.created_at', 'desc')
       .limit(limit)
       .execute();
