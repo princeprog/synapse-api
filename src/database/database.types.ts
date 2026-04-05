@@ -83,14 +83,35 @@ export interface ChatMentions {
   message_id: Int8;
 }
 
+export interface ChatMessagePins {
+  id: Generated<Int8>;
+  message_id: Int8;
+  pinned_at: Generated<Timestamp>;
+  pinned_by: string;
+}
+
+export interface ChatMessageReadReceipts {
+  message_id: Int8;
+  seen_at: Generated<Timestamp>;
+  user_id: string;
+}
+
 export interface ChatMessages {
   channel_id: Int8;
   content: string;
   created_at: Generated<Timestamp>;
   id: Generated<Int8>;
+  is_deleted: Generated<boolean>;
   is_edited: Generated<boolean>;
   parent_id: Int8 | null;
   sender_id: string;
+}
+
+export interface ChatMessageTags {
+  created_at: Generated<Timestamp>;
+  id: Generated<Int8>;
+  message_id: Int8;
+  tag: string;
 }
 
 export interface ChatReactions {
@@ -106,6 +127,7 @@ export interface ChatUserChatMessages {
   content: string | null;
   created_at: Timestamp | null;
   id: Int8 | null;
+  is_deleted: boolean | null;
   is_edited: boolean | null;
   parent_id: Int8 | null;
   sender_id: string | null;
@@ -235,6 +257,9 @@ export interface DB {
   "chat.attachments": ChatAttachments;
   "chat.channel_read_markers": ChatChannelReadMarkers;
   "chat.mentions": ChatMentions;
+  "chat.message_pins": ChatMessagePins;
+  "chat.message_read_receipts": ChatMessageReadReceipts;
+  "chat.message_tags": ChatMessageTags;
   "chat.messages": ChatMessages;
   "chat.reactions": ChatReactions;
   "chat.user_chat_messages": ChatUserChatMessages;

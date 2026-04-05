@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Request,
   UseGuards,
 } from '@nestjs/common';
@@ -57,6 +58,29 @@ export class MessagesController {
     );
   }
 
+  @Get('search')
+  search(
+    @Request() req: AuthenticatedRequest,
+    @Param('workspaceSlug') workspaceSlug: string,
+    @Param('channelId') channelId: string,
+    @Query('keyword') keyword?: string,
+    @Query('username') username?: string,
+    @Query('date') date?: string,
+    @Query('tag') tag?: string,
+  ) {
+    return this.messagesService.searchForChannel(
+      req.user.userId,
+      workspaceSlug,
+      channelId,
+      {
+        keyword,
+        username,
+        date,
+        tag,
+      },
+    );
+  }
+
   @Patch(':messageId')
   update(
     @Request() req: AuthenticatedRequest,
@@ -82,6 +106,64 @@ export class MessagesController {
     @Param('messageId') messageId: string,
   ) {
     return this.messagesService.removeForChannel(
+      req.user.userId,
+      workspaceSlug,
+      channelId,
+      messageId,
+    );
+  }
+
+  @Post(':messageId/pin')
+  pin(
+    @Request() req: AuthenticatedRequest,
+    @Param('workspaceSlug') workspaceSlug: string,
+    @Param('channelId') channelId: string,
+    @Param('messageId') messageId: string,
+  ) {
+    return this.messagesService.pinMessageForChannel(
+      req.user.userId,
+      workspaceSlug,
+      channelId,
+      messageId,
+    );
+  }
+
+  @Delete(':messageId/pin')
+  unpin(
+    @Request() req: AuthenticatedRequest,
+    @Param('workspaceSlug') workspaceSlug: string,
+    @Param('channelId') channelId: string,
+    @Param('messageId') messageId: string,
+  ) {
+    return this.messagesService.unpinMessageForChannel(
+      req.user.userId,
+      workspaceSlug,
+      channelId,
+      messageId,
+    );
+  }
+
+  @Get('pinned')
+  getPinned(
+    @Request() req: AuthenticatedRequest,
+    @Param('workspaceSlug') workspaceSlug: string,
+    @Param('channelId') channelId: string,
+  ) {
+    return this.messagesService.getPinnedMessagesForChannel(
+      req.user.userId,
+      workspaceSlug,
+      channelId,
+    );
+  }
+
+  @Post(':messageId/seen')
+  markSeen(
+    @Request() req: AuthenticatedRequest,
+    @Param('workspaceSlug') workspaceSlug: string,
+    @Param('channelId') channelId: string,
+    @Param('messageId') messageId: string,
+  ) {
+    return this.messagesService.markMessageAsSeenForChannel(
       req.user.userId,
       workspaceSlug,
       channelId,
