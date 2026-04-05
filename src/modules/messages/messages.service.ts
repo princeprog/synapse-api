@@ -58,6 +58,24 @@ type UserChatMessageRow = {
   username: string | null;
 };
 
+type MessagePinRow = {
+  message_id: string | null;
+  pinned_at: Date | null;
+  pinned_by: string | null;
+};
+
+type MessageReadReceiptSummary = {
+  seenByCount: number;
+  seenByUserIds: string[];
+};
+
+type MessageSearchFilters = {
+  keyword?: string;
+  username?: string;
+  date?: string;
+  tag?: string;
+};
+
 @Injectable()
 export class MessagesService {
   constructor(
@@ -697,13 +715,16 @@ export class MessagesService {
     const [reactionsMap, parentContextMap] = await Promise.all([
     const [reactionsMap, parentContextMap, mentionMap, replyCountMap] =
       await Promise.all([
-      this.buildReactionsMap(messageIds),
-      this.buildParentContextMap(parentIds),
-      this.buildMentionMap(messageIds),
-      options?.includeReplyCounts && options.channelId
-        ? this.buildReplyCountMap(options.channelId)
-        : Promise.resolve<Record<string, number>>({}),
-    ]);
+        this.buildReactionsMap(messageIds),
+        this.buildParentContextMap(parentIds),
+        this.buildMentionMap(messageIds),
+        options?.includeReplyCounts && options.channelId
+          ? this.buildReplyCountMap(options.channelId)
+          : Promise.resolve<Record<string, number>>({}),
+        this.buildTagMap(messageIds),
+        this.buildPinnedMap(messageIds),
+        this.buildReadReceiptMap(messageIds),
+      ]);
 
     return rows.map((row) => {
       const messageId = row.id === null ? '' : String(row.id);
