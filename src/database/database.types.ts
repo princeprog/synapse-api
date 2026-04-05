@@ -240,9 +240,13 @@ export interface WorkspacesWorkspaces {
 export interface DB {
   'auth.activity_log': AuthActivityLog;
   'auth.session': AuthSession;
-  'auth.user_profiles': AuthUserProfiles;
   'auth.users': AuthUsers;
   'chat.attachments': ChatAttachments;
+  'chat.channel_read_markers': ChatChannelReadMarkers;
+  'chat.mentions': ChatMentions;
+  'chat.message_pins': ChatMessagePins;
+  'chat.message_read_receipts': ChatMessageReadReceipts;
+  'chat.message_tags': ChatMessageTags;
   'chat.messages': ChatMessages;
   'chat.reactions': ChatReactions;
   'chat.user_chat_messages': ChatUserChatMessages;
@@ -251,23 +255,6 @@ export interface DB {
   'notifications.deliveries': NotificationsDeliveries;
   'notifications.events': NotificationsEvents;
   'tasks.tasks': TasksTasks;
-  "auth.activity_log": AuthActivityLog;
-  "auth.session": AuthSession;
-  "auth.users": AuthUsers;
-  "chat.attachments": ChatAttachments;
-  "chat.channel_read_markers": ChatChannelReadMarkers;
-  "chat.mentions": ChatMentions;
-  "chat.message_pins": ChatMessagePins;
-  "chat.message_read_receipts": ChatMessageReadReceipts;
-  "chat.message_tags": ChatMessageTags;
-  "chat.messages": ChatMessages;
-  "chat.reactions": ChatReactions;
-  "chat.user_chat_messages": ChatUserChatMessages;
-  "docs.page_blocks": DocsPageBlocks;
-  "docs.pages": DocsPages;
-  "notifications.deliveries": NotificationsDeliveries;
-  "notifications.events": NotificationsEvents;
-  "tasks.tasks": TasksTasks;
   users: Users;
   "workspaces.channels": WorkspacesChannels;
   "workspaces.workspace_invitations": WorkspacesWorkspaceInvitations;
