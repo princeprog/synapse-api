@@ -1,4 +1,4 @@
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { DB } from 'src/database/database.types';
@@ -8,6 +8,32 @@ import * as bcrypt from 'bcrypt';
 @Injectable()
 export class UsersService {
   constructor(@Inject('KYSELY_DB') private readonly db: Kysely<DB>) {}
+
+  async getProfileByUserId(userId: string) {
+    const userProfile = await this.db
+      .selectFrom('auth.users as u')
+      .leftJoin('auth.user_profiles as up', 'up.user_id', 'u.id')
+      .select([
+        'u.id',
+        'u.username',
+        'u.email',
+        'u.status',
+        'u.is_active',
+        'u.created_at',
+        'up.display_name',
+        'up.avatar_url',
+        'up.bio',
+        'up.timezone',
+      ])
+      .where('u.id', '=', userId)
+      .executeTakeFirst();
+
+    if (!userProfile) {
+      throw new NotFoundException('User profile not found');
+    }
+
+    return userProfile;
+  }
 
   async create(createUserDto: CreateUserDto) {
     const { username, email, password } = createUserDto;
@@ -44,8 +70,106 @@ export class UsersService {
     return user;
   }
 
-  update(id: number, updateUserDto: UpdateUserDto) {
-    return `This action updates a #${id} user`;
+  async updateUser(id: string, updateUserDto: UpdateUserDto) {
+    const { username, email, password, status } = updateUserDto;
+
+    const authUpdate: {
+      username?: string;
+      email?: string;
+      password_hash?: string;
+      status?: 'active' | 'offline';
+    } = {};
+
+    if (username !== undefined) authUpdate.username = username;
+    if (email !== undefined) authUpdate.email = email;
+    if (status !== undefined) authUpdate.status = status;
+    if (password !== undefined) {
+      authUpdate.password_hash = await bcrypt.hash(password, 10);
+    }
+
+    if (Object.keys(authUpdate).length > 0) {
+      await this.db
+        .updateTable('auth.users')
+        .set(authUpdate)
+        .where('id', '=', id)
+        .executeTakeFirst();
+    }
+
+    const hasProfileFields =
+      updateUserDto.display_name !== undefined ||
+      updateUserDto.avatar_url !== undefined ||
+      updateUserDto.bio !== undefined ||
+      updateUserDto.timezone !== undefined;
+
+    if (hasProfileFields) {
+      const profileUpdate: {
+        display_name?: string | null;
+        avatar_url?: string | null;
+        bio?: string | null;
+        timezone?: string | null;
+      } = {};
+
+      if (updateUserDto.display_name !== undefined) {
+        profileUpdate.display_name = updateUserDto.display_name;
+      }
+      if (updateUserDto.avatar_url !== undefined) {
+        profileUpdate.avatar_url = updateUserDto.avatar_url;
+      }
+      if (updateUserDto.bio !== undefined) {
+        profileUpdate.bio = updateUserDto.bio;
+      }
+      if (updateUserDto.timezone !== undefined) {
+        profileUpdate.timezone = updateUserDto.timezone;
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+      await (this.db as any)
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+        .insertInto('auth.user_profiles')
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+        .values({ user_id: id, ...profileUpdate })
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+        .onConflict((oc: any) =>
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+          oc.column('user_id').doUpdateSet(profileUpdate),
+        )
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+        .executeTakeFirst();
+    }
+
+    const updatedUser = await this.db
+      .selectFrom('auth.users as u')
+      .leftJoin('auth.user_profiles as up', 'up.user_id', 'u.id')
+      .select([
+        'u.id',
+        'u.username',
+        'u.email',
+        'u.status',
+        'u.is_active',
+        'u.created_at',
+        'up.display_name',
+        'up.avatar_url',
+        'up.bio',
+        'up.timezone',
+      ])
+      .where('u.id', '=', id)
+      .executeTakeFirst();
+
+    return updatedUser;
+  }
+
+  async setStatus(userId: string, status: 'active' | 'offline') {
+    const result = await this.db
+      .updateTable('auth.users')
+      .set({ status })
+      .where('id', '=', userId)
+      .executeTakeFirst();
+
+    if (result.numUpdatedRows === 0n) {
+      throw new NotFoundException('User not found');
+    }
+
+    return { userId, status };
   }
 
   remove(id: number) {

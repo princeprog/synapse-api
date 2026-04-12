@@ -59,11 +59,14 @@ export class AuthService {
   }
 
   async login(user: any, response: FastifyReply) {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access
+    await this.usersService.setStatus(user.id, 'active');
     const now = new Date();
     const refreshExpiredAt = new Date(
       now.getTime() + REFRESH_TOKEN_TTL_SECONDS * 1000,
     );
     const tempRefreshTokenHash = await bcrypt.hash(
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
       `${user.id}:${now.getTime()}`,
       10,
     );
@@ -71,6 +74,7 @@ export class AuthService {
     const createdSession = await this.db
       .insertInto('auth.session')
       .values({
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
         user_id: user.id,
         refresh_token_hash: tempRefreshTokenHash,
         expired_at: refreshExpiredAt,
@@ -80,7 +84,9 @@ export class AuthService {
       .executeTakeFirstOrThrow();
 
     const payload: AuthPayload = {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
       username: user.username,
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
       sub: user.id,
       session_id: Number(createdSession.id),
     };
@@ -128,6 +134,7 @@ export class AuthService {
     if (refreshToken) {
       try {
         const payload = this.verifyRefreshToken(refreshToken);
+        await this.usersService.setStatus(payload.sub, 'offline');
         const session = await this.findActiveSession(
           payload.sub,
           payload.session_id,

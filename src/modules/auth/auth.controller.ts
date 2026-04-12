@@ -36,6 +36,7 @@ export class AuthController {
     @Body() loginDto: LoginDto,
     @Res({ passthrough: true }) response: FastifyReply,
   ) {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const user = await this.authService.validateUser(
       loginDto.username,
       loginDto.password,
@@ -66,6 +67,7 @@ export class AuthController {
     description: 'Retrieves the profile information of the authenticated user.',
   })
   getProfile(@Request() req) {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-member-access
     return req.user;
   }
 }
