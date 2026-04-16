@@ -12,18 +12,12 @@ export class UsersService {
   async getProfileByUserId(userId: string) {
     const userProfile = await this.db
       .selectFrom('auth.users as u')
-      .leftJoin('auth.user_profiles as up', 'up.user_id', 'u.id')
       .select([
         'u.id',
         'u.username',
         'u.email',
-        'u.status',
         'u.is_active',
         'u.created_at',
-        'up.display_name',
-        'up.avatar_url',
-        'up.bio',
-        'up.timezone',
       ])
       .where('u.id', '=', userId)
       .executeTakeFirst();
@@ -71,18 +65,16 @@ export class UsersService {
   }
 
   async updateUser(id: string, updateUserDto: UpdateUserDto) {
-    const { username, email, password, status } = updateUserDto;
+    const { username, email, password } = updateUserDto;
 
     const authUpdate: {
       username?: string;
       email?: string;
       password_hash?: string;
-      status?: 'active' | 'offline';
     } = {};
 
     if (username !== undefined) authUpdate.username = username;
     if (email !== undefined) authUpdate.email = email;
-    if (status !== undefined) authUpdate.status = status;
     if (password !== undefined) {
       authUpdate.password_hash = await bcrypt.hash(password, 10);
     }
@@ -102,55 +94,18 @@ export class UsersService {
       updateUserDto.timezone !== undefined;
 
     if (hasProfileFields) {
-      const profileUpdate: {
-        display_name?: string | null;
-        avatar_url?: string | null;
-        bio?: string | null;
-        timezone?: string | null;
-      } = {};
-
-      if (updateUserDto.display_name !== undefined) {
-        profileUpdate.display_name = updateUserDto.display_name;
-      }
-      if (updateUserDto.avatar_url !== undefined) {
-        profileUpdate.avatar_url = updateUserDto.avatar_url;
-      }
-      if (updateUserDto.bio !== undefined) {
-        profileUpdate.bio = updateUserDto.bio;
-      }
-      if (updateUserDto.timezone !== undefined) {
-        profileUpdate.timezone = updateUserDto.timezone;
-      }
-
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call
-      await (this.db as any)
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-        .insertInto('auth.user_profiles')
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-        .values({ user_id: id, ...profileUpdate })
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-        .onConflict((oc: any) =>
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-          oc.column('user_id').doUpdateSet(profileUpdate),
-        )
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-        .executeTakeFirst();
+      // TODO: Profile fields (display_name, avatar_url, bio, timezone) update
+      // requires user_profiles table to be created in the database
     }
 
     const updatedUser = await this.db
       .selectFrom('auth.users as u')
-      .leftJoin('auth.user_profiles as up', 'up.user_id', 'u.id')
       .select([
         'u.id',
         'u.username',
         'u.email',
-        'u.status',
         'u.is_active',
         'u.created_at',
-        'up.display_name',
-        'up.avatar_url',
-        'up.bio',
-        'up.timezone',
       ])
       .where('u.id', '=', id)
       .executeTakeFirst();
@@ -158,10 +113,10 @@ export class UsersService {
     return updatedUser;
   }
 
-  async setStatus(userId: string, status: 'active' | 'offline') {
+  async setStatus(userId: string, isActive: boolean) {
     const result = await this.db
       .updateTable('auth.users')
-      .set({ status })
+      .set({ is_active: isActive })
       .where('id', '=', userId)
       .executeTakeFirst();
 
@@ -169,7 +124,7 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
-    return { userId, status };
+    return { userId, isActive };
   }
 
   remove(id: number) {
