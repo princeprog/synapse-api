@@ -12,12 +12,17 @@ export class UsersService {
   async getProfileByUserId(userId: string) {
     const userProfile = await this.db
       .selectFrom('auth.users as u')
+      .leftJoin('auth.user_profiles as up', 'up.user_id', 'u.id')
       .select([
         'u.id',
         'u.username',
         'u.email',
         'u.is_active',
         'u.created_at',
+        'up.display_name',
+        'up.avatar_url',
+        'up.bio',
+        'up.timezone',
       ])
       .where('u.id', '=', userId)
       .executeTakeFirst();
@@ -94,8 +99,6 @@ export class UsersService {
       updateUserDto.timezone !== undefined;
 
     if (hasProfileFields) {
-      // TODO: Profile fields (display_name, avatar_url, bio, timezone) update
-      // requires user_profiles table to be created in the database
       const profileUpdate: {
         display_name?: string | null;
         avatar_url?: string | null;
@@ -133,12 +136,17 @@ export class UsersService {
 
     const updatedUser = await this.db
       .selectFrom('auth.users as u')
+      .leftJoin('auth.user_profiles as up', 'up.user_id', 'u.id')
       .select([
         'u.id',
         'u.username',
         'u.email',
         'u.is_active',
         'u.created_at',
+        'up.display_name',
+        'up.avatar_url',
+        'up.bio',
+        'up.timezone',
       ])
       .where('u.id', '=', id)
       .executeTakeFirst();
