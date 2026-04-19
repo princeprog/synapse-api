@@ -44,37 +44,6 @@ type MessageSearchFilters = {
   date?: string;
   tag?: string;
 };
-import { Message, User, UserChatMessages } from 'src/database/schema';
-import { NotFoundException,ForbiddenException } from '@nestjs/common';
-
-type UserChatMessageRow = {
-  id: string | null;
-  channel_id: string | null;
-  sender_id: string | null;
-  parent_id: string | null;
-  content: string | null;
-  is_edited: boolean | null;
-  created_at: Date | null;
-  username: string | null;
-};
-
-type MessagePinRow = {
-  message_id: string | null;
-  pinned_at: Date | null;
-  pinned_by: string | null;
-};
-
-type MessageReadReceiptSummary = {
-  seenByCount: number;
-  seenByUserIds: string[];
-};
-
-type MessageSearchFilters = {
-  keyword?: string;
-  username?: string;
-  date?: string;
-  tag?: string;
-};
 
 @Injectable()
 export class MessagesService {
@@ -106,16 +75,6 @@ export class MessagesService {
   }
 
   private mapUserChatMessageRow(row: UserChatMessageRow): UserChatMessages {
-  private CreatedMessageRow(row: {
-    id: string | null;
-    channel_id: string | null;
-    sender_id: string | null;
-    parent_id: string | null;
-    content: string | null;
-    is_edited: boolean | null;
-    created_at: Date | null;
-    username: string | null;  
-  }): UserChatMessages {
     return {
       id: String(row.id),
       channel_id: String(row.channel_id),
@@ -391,10 +350,6 @@ export class MessagesService {
     const mentionRegex = /(^|\s)@([a-zA-Z0-9_]+)/g;
     const usernames = new Set<string>();
     let mentionsEveryone = false;
-  private extractMentionUsernames(content: string): string[] {
-    const mentionRegex = /(^|\s)@([a-zA-Z0-9_]+)/g;
-    const usernames = new Set<string>();
-    let mentionsEveryone = false;
 
     for (const match of content.matchAll(mentionRegex)) {
       const username = match[2]?.trim().toLowerCase();
@@ -412,15 +367,12 @@ export class MessagesService {
       usernames: [...usernames],
       mentionsEveryone,
     };
-    return [...usernames];
   }
 
   private async resolveMentionedUserIds(
     workspaceId: string,
     usernames: string[],
     mentionsEveryone: boolean,
-  ): Promise<string[]> {
-    if (usernames.length === 0 && !mentionsEveryone) {
   ): Promise<string[]> {
     if (usernames.length === 0 && !mentionsEveryone) {
       return [];
@@ -466,11 +418,6 @@ export class MessagesService {
     notifyNewMentions: boolean;
   }): Promise<string[]> {
     const mentionInfo = this.extractMentions(input.content);
-    const resolvedUserIds = await this.resolveMentionedUserIds(
-      input.workspaceId,
-      mentionInfo.usernames,
-      mentionInfo.mentionsEveryone,
-    const usernames = this.extractMentionUsernames(input.content);
     const resolvedUserIds = await this.resolveMentionedUserIds(
       input.workspaceId,
       mentionInfo.usernames,
@@ -691,7 +638,6 @@ export class MessagesService {
     rows: UserChatMessageRow[],
     options?: { includeReplyCounts?: boolean; channelId?: string },
   ) {
-  private async enrichMessages(rows: UserChatMessageRow[]) {
     const messageIds = rows
       .map((message) => (message.id === null ? null : String(message.id)))
       .filter((messageId): messageId is string => Boolean(messageId));
@@ -712,20 +658,6 @@ export class MessagesService {
         this.buildPinnedMap(messageIds),
         this.buildReadReceiptMap(messageIds),
       ]);
-    const [reactionsMap, parentContextMap] = await Promise.all([
-    const [reactionsMap, parentContextMap, mentionMap, replyCountMap] =
-      await Promise.all([
-        this.buildReactionsMap(messageIds),
-        this.buildParentContextMap(parentIds),
-        this.buildMentionMap(messageIds),
-        options?.includeReplyCounts && options.channelId
-          ? this.buildReplyCountMap(options.channelId)
-          : Promise.resolve<Record<string, number>>({}),
-        this.buildTagMap(messageIds),
-        this.buildPinnedMap(messageIds),
-        this.buildReadReceiptMap(messageIds),
-      ]);
-
     return rows.map((row) => {
       const messageId = row.id === null ? '' : String(row.id);
       const parentContext = row.parent_id
@@ -756,9 +688,6 @@ export class MessagesService {
     workspaceSlug: string,
     userId: string,
   ) {
-  
-
-  private async resolveWorkspaceForMember(workspaceSlug: string, userId: string) {
     const workspace = await this.db
       .selectFrom('workspaces.workspaces as w')
       .innerJoin('workspaces.workspace_members as wm', (join) =>
@@ -825,8 +754,6 @@ export class MessagesService {
       workspaceSlug,
       userId,
     );
-  ): Promise<UserChatMessages> {
-    const workspace = await this.resolveWorkspaceForMember(workspaceSlug, userId);
     await this.findChannelById(workspace.id, channelId);
 
     const content = dto.content?.trim();
@@ -901,15 +828,6 @@ export class MessagesService {
       channelId,
     });
     return enriched;
-      const message = await this.db
-        .selectFrom('chat.user_chat_messages')
-        .selectAll()
-        .where('id', '=', created.id)
-        .executeTakeFirstOrThrow();
-
-    return this.CreatedMessageRow(message);
-    const [enriched] = await this.enrichMessages([message]);
-    return enriched;
   }
 
   async findAllForChannel(
@@ -921,8 +839,6 @@ export class MessagesService {
       workspaceSlug,
       userId,
     );
-  ): Promise<UserChatMessages[]> {
-    const workspace = await this.resolveWorkspaceForMember(workspaceSlug, userId);
     await this.findChannelById(workspace.id, channelId);
 
     const messages = await this.db
@@ -936,8 +852,6 @@ export class MessagesService {
       includeReplyCounts: true,
       channelId,
     });
-    return messages.map((message) => this.CreatedMessageRow(message));
-    return this.enrichMessages(messages);
   }
 
   async updateForChannel(
@@ -967,7 +881,6 @@ export class MessagesService {
         includeReplyCounts: true,
         channelId,
       });
-      const [enriched] = await this.enrichMessages([existingWithUser]);
       return enriched;
     }
 
@@ -1008,7 +921,6 @@ export class MessagesService {
       includeReplyCounts: true,
       channelId,
     });
-    const [enriched] = await this.enrichMessages([updatedWithUser]);
     return enriched;
   }
 
@@ -1036,7 +948,6 @@ export class MessagesService {
         includeReplyCounts: true,
         channelId,
       }),
-      replies: await this.enrichMessages(replies),
     };
   }
 
@@ -1109,7 +1020,6 @@ export class MessagesService {
         includeReplyCounts: true,
         channelId,
       }),
-      thread: await this.enrichMessages(threadRows),
     };
   }
 
