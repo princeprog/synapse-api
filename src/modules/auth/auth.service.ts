@@ -60,7 +60,7 @@ export class AuthService {
 
   async login(user: any, response: FastifyReply) {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access
-    await this.usersService.setStatus(user.id, 'active');
+    await this.usersService.setStatus(user.id, true);
     const now = new Date();
     const refreshExpiredAt = new Date(
       now.getTime() + REFRESH_TOKEN_TTL_SECONDS * 1000,
@@ -134,7 +134,7 @@ export class AuthService {
     if (refreshToken) {
       try {
         const payload = this.verifyRefreshToken(refreshToken);
-        await this.usersService.setStatus(payload.sub, 'offline');
+        await this.usersService.setStatus(payload.sub, false);
         const session = await this.findActiveSession(
           payload.sub,
           payload.session_id,
