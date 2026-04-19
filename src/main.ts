@@ -9,9 +9,12 @@ import fastifyCookie from '@fastify/cookie';
 import { IoAdapter } from '@nestjs/platform-socket.io';
 
 async function bootstrap() {
+  // Fastify defaults to ~1MB body size. Allow larger JSON payloads for profile updates.
+  const bodyLimitBytes = Number(process.env.BODY_LIMIT_BYTES ?? 10 * 1024 * 1024);
+
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    new FastifyAdapter(),
+    new FastifyAdapter({ bodyLimit: bodyLimitBytes }),
   );
 
   // Enable WebSocket adapter for Fastify
