@@ -445,7 +445,6 @@ export class WorkspacesService {
       recipientUserId: invitation.invited_user_id
         ? invitation.invited_user_id
         : null,
-      recipientUserId: invitation.invited_user_id ? invitation.invited_user_id : null,
     });
 
     return { message: 'Invitation revoked successfully' };
