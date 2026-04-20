@@ -8,7 +8,7 @@ export async function up(db: Kysely<any>): Promise<void> {
     .createTable('typing_indicators')
     .addColumn('id', 'uuid', (col) => col.primaryKey().defaultTo(sql`gen_random_uuid()`))
     .addColumn('channel_id', 'int8', (col) =>
-      col.notNull().references('chat.channels.id').onDelete('cascade'),
+      col.notNull().references('workspaces.channels.id').onDelete('cascade'),
     )
     .addColumn('user_id', 'uuid', (col) =>
       col.notNull().references('auth.users.id').onDelete('cascade'),
