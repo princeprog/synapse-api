@@ -29,4 +29,4 @@ export const DATABASE_TOKEN = 'KYSELY_DB';
   ],
   exports: [DATABASE_TOKEN],
 })
-export class DatabaseModule {}
+export class DatabaseModule { }

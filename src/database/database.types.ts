@@ -50,6 +50,14 @@ export interface AuthUserProfiles {
   user_id: string;
 }1
 
+export interface AuthUserProfiles {
+  avatar_url: string | null;
+  bio: string | null;
+  display_name: string | null;
+  timezone: string | null;
+  user_id: string;
+}
+
 export interface AuthUsers {
   created_at: Generated<Timestamp>;
   email: string;
@@ -119,6 +127,14 @@ export interface ChatReactions {
   emoji: string;
   id: Generated<Int8>;
   message_id: Int8;
+  user_id: string;
+}
+
+export interface ChatTypingIndicators {
+  channel_id: Int8;
+  created_at: Generated<Timestamp>;
+  expires_at: Timestamp;
+  id: Generated<string>;
   user_id: string;
 }
 
@@ -240,7 +256,7 @@ export interface WorkspacesWorkspaces {
 export interface DB {
   'auth.activity_log': AuthActivityLog;
   'auth.session': AuthSession;
-  'auth.user_profiles': AuthUserProfiles;
+  "auth.user_profiles": AuthUserProfiles;
   'auth.users': AuthUsers;
   'chat.attachments': ChatAttachments;
   'chat.channel_read_markers': ChatChannelReadMarkers;
@@ -250,6 +266,7 @@ export interface DB {
   'chat.message_tags': ChatMessageTags;
   'chat.messages': ChatMessages;
   'chat.reactions': ChatReactions;
+  "chat.typing_indicators": ChatTypingIndicators;
   'chat.user_chat_messages': ChatUserChatMessages;
   'docs.page_blocks': DocsPageBlocks;
   'docs.pages': DocsPages;
