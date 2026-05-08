@@ -14,6 +14,7 @@ import { CreateWorkspaceDto } from './dto/create-workspace.dto';
 import { UpdateWorkspaceDto } from './dto/update-workspace.dto';
 import { CreateWorkspaceInvitationsDto } from './dto/create-workspace-invitations.dto';
 import { UpdateWorkspaceMemberRoleDto } from './dto/update-workspace-member-role.dto';
+import { UpdateWorkspaceMemberProfileDto } from './dto/update-workspace-member-profile.dto';
 import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
@@ -108,7 +109,6 @@ export class WorkspacesService {
         workspace_id: createdWorkspace.id,
         member_id: userId,
         role: 'Admin',
-        joined_at: Date.now(),
       })
       .executeTakeFirst();
 
@@ -328,6 +328,7 @@ export class WorkspacesService {
         workspace_id: workspaceAccess.id,
         email,
         role,
+        invited_by_user_id: userId,
         invited_user_id: invitedUser?.id ?? null,
         token_hash: tokens.hashedToken,
         expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
@@ -514,6 +515,7 @@ export class WorkspacesService {
         'wi.role',
         'wi.status',
         'wi.expires_at',
+        'wi.invited_by_user_id',
         'w.slug as workspace_slug',
         'w.name as workspace_name',
       ])
@@ -559,7 +561,7 @@ export class WorkspacesService {
             workspace_id: invitation.workspace_id,
             member_id: user.id,
             role: this.normalizeMemberRole(invitation.role),
-            joined_at: Date.now(),
+            invited_by_user_id: invitation.invited_by_user_id ?? null,
           })
           .executeTakeFirst();
       }
@@ -773,6 +775,9 @@ export class WorkspacesService {
       .select([
         'wm.role',
         'wm.joined_at',
+        'wm.workspace_display_name',
+        'wm.job_title',
+        'wm.invited_by_user_id',
         'u.id as user_id',
         'u.username',
         'u.email',
@@ -818,6 +823,77 @@ export class WorkspacesService {
       .select([
         'wm.role',
         'wm.joined_at',
+        'wm.workspace_display_name',
+        'wm.job_title',
+        'wm.invited_by_user_id',
+        'u.id as user_id',
+        'u.username',
+        'u.email',
+      ])
+      .where('wm.workspace_id', '=', workspace.id)
+      .where('wm.member_id', '=', memberId)
+      .executeTakeFirstOrThrow();
+
+    return updatedMember;
+  }
+
+  async updateWorkspaceMemberProfile(
+    workspaceSlug: string,
+    userId: string,
+    memberId: string,
+    dto: UpdateWorkspaceMemberProfileDto,
+  ) {
+    const workspace = await this.resolveWorkspaceMemberAccess(
+      workspaceSlug,
+      userId,
+    );
+    const actorRole = workspace.role.toLowerCase();
+
+    if (actorRole !== 'admin' && memberId !== userId) {
+      throw new ForbiddenException(
+        'Only admins can update other member profiles',
+      );
+    }
+
+    await this.findWorkspaceMember(workspace.id, memberId);
+
+    const updates: {
+      workspace_display_name?: string | null;
+      job_title?: string | null;
+    } = {};
+
+    if (dto.workspaceDisplayName !== undefined) {
+      const raw = dto.workspaceDisplayName ?? '';
+      const trimmed = raw.trim();
+      updates.workspace_display_name = trimmed.length > 0 ? trimmed : null;
+    }
+
+    if (dto.jobTitle !== undefined) {
+      const raw = dto.jobTitle ?? '';
+      const trimmed = raw.trim();
+      updates.job_title = trimmed.length > 0 ? trimmed : null;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      throw new BadRequestException('No profile fields provided');
+    }
+
+    await this.db
+      .updateTable('workspaces.workspace_members')
+      .set(updates)
+      .where('workspace_id', '=', workspace.id)
+      .where('member_id', '=', memberId)
+      .executeTakeFirst();
+
+    const updatedMember = await this.db
+      .selectFrom('workspaces.workspace_members as wm')
+      .innerJoin('auth.users as u', 'u.id', 'wm.member_id')
+      .select([
+        'wm.role',
+        'wm.joined_at',
+        'wm.workspace_display_name',
+        'wm.job_title',
+        'wm.invited_by_user_id',
         'u.id as user_id',
         'u.username',
         'u.email',

@@ -227,6 +227,7 @@ export interface WorkspacesWorkspaceInvitations {
   email: string;
   expires_at: Timestamp;
   id: Generated<string>;
+  invited_by_user_id: string | null;
   invited_user_id: string | null;
   responded_at: Timestamp | null;
   responded_by_user_id: string | null;
@@ -239,9 +240,12 @@ export interface WorkspacesWorkspaceInvitations {
 
 export interface WorkspacesWorkspaceMembers {
   id: Generated<Int8>;
-  joined_at: Int8;
+  invited_by_user_id: string | null;
+  job_title: string | null;
+  joined_at: Generated<Timestamp>;
   member_id: string;
   role: string;
+  workspace_display_name: string | null;
   workspace_id: string;
 }
 

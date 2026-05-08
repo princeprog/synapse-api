@@ -17,6 +17,7 @@ import { UpdateWorkspaceDto } from './dto/update-workspace.dto';
 import { WorkspacesService } from './workspaces.service';
 import { CreateWorkspaceInvitationsDto } from './dto/create-workspace-invitations.dto';
 import { UpdateWorkspaceMemberRoleDto } from './dto/update-workspace-member-role.dto';
+import { UpdateWorkspaceMemberProfileDto } from './dto/update-workspace-member-profile.dto';
 import { ApiBody, ApiOperation } from '@nestjs/swagger';
 
 type AuthenticatedRequest = FastifyRequest & {
@@ -119,6 +120,29 @@ export class WorkspacesController {
     @Body() dto: UpdateWorkspaceMemberRoleDto,
   ) {
     return this.workspacesService.updateWorkspaceMemberRole(
+      workspaceSlug,
+      req.user.userId,
+      memberId,
+      dto,
+    );
+  }
+
+  @Patch(':workspaceSlug/members/:memberId/profile')
+  @ApiOperation({
+    summary: 'Update workspace member profile',
+    description: 'Updates a member profile inside a workspace.',
+  })
+  @ApiBody({
+    type: UpdateWorkspaceMemberProfileDto,
+    description: 'Workspace-specific profile fields to update',
+  })
+  updateMemberProfile(
+    @Request() req: AuthenticatedRequest,
+    @Param('workspaceSlug') workspaceSlug: string,
+    @Param('memberId') memberId: string,
+    @Body() dto: UpdateWorkspaceMemberProfileDto,
+  ) {
+    return this.workspacesService.updateWorkspaceMemberProfile(
       workspaceSlug,
       req.user.userId,
       memberId,
