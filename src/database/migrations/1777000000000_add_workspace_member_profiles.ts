@@ -5,7 +5,7 @@ export async function up(db: Kysely<any>): Promise<void> {
   await db.schema
     .withSchema('workspaces')
     .alterTable('workspace_members')
-    .addColumn('workspace_display_name', 'varchar(255)')
+    .addColumn('display_name', 'varchar(255)')
     .addColumn('job_title', 'varchar(255)')
     .addColumn('invited_by_user_id', 'uuid', (col) =>
       col.references('auth.users.id').onDelete('set null'),
@@ -80,6 +80,6 @@ export async function down(db: Kysely<any>): Promise<void> {
     .alterTable('workspace_members')
     .dropColumn('invited_by_user_id')
     .dropColumn('job_title')
-    .dropColumn('workspace_display_name')
+    .dropColumn('display_name')
     .execute();
 }

@@ -245,7 +245,7 @@ export interface WorkspacesWorkspaceMembers {
   joined_at: Generated<Timestamp>;
   member_id: string;
   role: string;
-  workspace_display_name: string | null;
+  display_name: string | null;
   workspace_id: string;
 }
 

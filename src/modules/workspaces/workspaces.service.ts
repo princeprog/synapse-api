@@ -775,7 +775,7 @@ export class WorkspacesService {
       .select([
         'wm.role',
         'wm.joined_at',
-        'wm.workspace_display_name',
+        'wm.display_name',
         'wm.job_title',
         'wm.invited_by_user_id',
         'u.id as user_id',
@@ -823,7 +823,7 @@ export class WorkspacesService {
       .select([
         'wm.role',
         'wm.joined_at',
-        'wm.workspace_display_name',
+        'wm.display_name',
         'wm.job_title',
         'wm.invited_by_user_id',
         'u.id as user_id',
@@ -858,14 +858,14 @@ export class WorkspacesService {
     await this.findWorkspaceMember(workspace.id, memberId);
 
     const updates: {
-      workspace_display_name?: string | null;
+      display_name?: string | null;
       job_title?: string | null;
     } = {};
 
     if (dto.workspaceDisplayName !== undefined) {
       const raw = dto.workspaceDisplayName ?? '';
       const trimmed = raw.trim();
-      updates.workspace_display_name = trimmed.length > 0 ? trimmed : null;
+      updates.display_name = trimmed.length > 0 ? trimmed : null;
     }
 
     if (dto.jobTitle !== undefined) {
@@ -891,7 +891,7 @@ export class WorkspacesService {
       .select([
         'wm.role',
         'wm.joined_at',
-        'wm.workspace_display_name',
+        'wm.display_name',
         'wm.job_title',
         'wm.invited_by_user_id',
         'u.id as user_id',
